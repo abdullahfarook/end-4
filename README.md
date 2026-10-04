@@ -7,6 +7,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 |---|---|---|
 | `super-tab/` | ALT+Tab goes to next workspace and shows the overview; releasing ALT closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
 | `dolphin-menu/` | Dolphin right-click: "Open in Claude" (kitty + claude) and "Open in VS Code" on folders | `~/.local/share/kio/servicemenus/` |
+| `ai-sidebar/` | Optional left sidebar backend: native Intelligence panel, or kitty running Claude Code / Codex (Settings → Services → AI) | `~/.config/quickshell/ii/` (Config + Settings patch), `~/.config/hypr/custom/` (script + SUPER+A/B/O) |
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
 
 ## Workflow: change, back up, apply, push
