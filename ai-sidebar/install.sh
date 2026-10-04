@@ -4,7 +4,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"
 KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
-FILES=(modules/common/Config.qml modules/settings/ServicesConfig.qml)
+FILES=(modules/common/Config.qml modules/settings/ServicesConfig.qml modules/ii/sidebarLeft/SidebarLeft.qml)
 BACKUP="$HOME/backups/ai-sidebar/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BACKUP/"
 for f in "${FILES[@]}"; do mkdir -p "$BACKUP/$(dirname "$f")"; cp "$Q/$f" "$BACKUP/$f"; done

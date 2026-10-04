@@ -41,3 +41,27 @@
      }
  
      ContentSection {
+--- a/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.464002327 +0500
++++ b/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.473628991 +0500
+@@ -15,6 +15,21 @@
+     property Component contentComponent: SidebarLeftContent {}
+     property Item sidebarContent
+ 
++    // With a Claude/Codex backend, redirect any attempt to open the native sidebar (bar button, corners) to the terminal window
++    Connections {
++        target: GlobalStates
++        function onSidebarLeftOpenChanged() {
++            if (GlobalStates.sidebarLeftOpen && Config.options.ai.sidebarBackend !== "native") {
++                GlobalStates.sidebarLeftOpen = false;
++                aiSidebarProc.running = true;
++            }
++        }
++    }
++    Process {
++        id: aiSidebarProc
++        command: ["bash", "-c", "$HOME/.config/hypr/custom/ai-sidebar.sh"]
++    }
++
+     function toggleDetach() {
+         root.detach = !root.detach;
+     }
