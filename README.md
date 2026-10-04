@@ -5,8 +5,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 
 | Folder | What it does | Applies to |
 |---|---|---|
-| `alt-tab/` | ALT+Tab toggles current/previous workspace | `~/.config/hypr/custom/keybinds.lua` |
-| `super-tab/` | SUPER+Tab goes to next workspace and shows the overview; releasing SUPER closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
+| `super-tab/` | ALT+Tab goes to next workspace and shows the overview; releasing ALT closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
 | `dolphin-menu/` | Dolphin right-click: "Open in Claude" (kitty + claude) and "Open in VS Code" on folders | `~/.local/share/kio/servicemenus/` |
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
 
@@ -23,6 +22,6 @@ Installers are idempotent: keybind snippets live between `-- >>> name >>>` / `--
 
 - Hyprland here uses the **Lua config**. Legacy dispatch syntax fails; use e.g. `hyprctl dispatch 'hl.dsp.focus({ workspace = "e+1" })'`.
 - `super-tab.sh`: sets a flag file, enters the `super-tab` submap, goes to the next workspace, opens the overview (`qs -c ii ipc call search open`) if the `quickshell:overview` layer is absent.
-- `super-tab-release.sh`: on SUPER release (only if the flag exists) resets the submap, waits 0.15s so the shell's own release handler runs first, then closes the overview.
+- `super-tab-release.sh`: on ALT release (only if the flag exists) resets the submap, waits 0.15s so the shell's own release handler runs first, then closes the overview.
 - The submap exists because `SUPER+mouse:272` is bound to window-move, which swallows clicks on overview previews while SUPER is held. Inside the submap that bind is absent. Side effect: other SUPER shortcuts are inactive until SUPER is released.
 - The default `SUPER + Tab` bind (`hyprland/keybinds.lua`) is removed with `hl.unbind` in the custom file; don't edit the upstream file.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# On SUPER release after a SUPER+Tab session: close the overview, keeping the selected workspace.
+# On ALT release after a ALT+Tab session: close the overview, keeping the selected workspace.
 flag="${XDG_RUNTIME_DIR:-/tmp}/super-tab-active"
 [ -e "$flag" ] || exit 0
 rm -f "$flag"
