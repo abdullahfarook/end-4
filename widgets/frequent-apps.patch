@@ -1,0 +1,254 @@
+diff --color -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
+--- a/modules/common/Directories.qml	2026-10-04 17:36:07.350161838 +0500
++++ b/modules/common/Directories.qml	2026-10-04 17:36:07.341161768 +0500
+@@ -34,6 +34,7 @@
+     property string shellConfigName: "config.json"
+     property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
+ 	property string todoPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo.json`)
++	property string appUsagePath: FileUtils.trimFileProtocol(`${Directories.state}/user/app_usage.json`)
+ 	property string notesPath: FileUtils.trimFileProtocol(`${Directories.state}/user/notes.txt`)
+ 	property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
+     property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
+diff --color -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/SearchWidget.qml
+--- a/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:07.348161822 +0500
++++ b/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:07.338161744 +0500
+@@ -5,6 +5,7 @@
+ import QtQuick
+ import QtQuick.Layouts
+ import Quickshell
++import Quickshell.Widgets
+ 
+ import qs
+ import qs.services
+@@ -21,6 +22,8 @@
+ 
+     property string searchingText: LauncherSearch.query
+     property bool showResults: searchingText != ""
++    property var frequentApps: AppSearch.frequentApps(LauncherSearch.frequentAppsLimit)
++    property bool showFrequentApps: !showResults && frequentApps.length > 0
+     implicitWidth: searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2
+     implicitHeight: searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2
+ 
+@@ -150,6 +153,36 @@
+                 }
+             }
+ 
++            RowLayout { // Frequent apps, icons only
++                visible: root.showFrequentApps
++                Layout.alignment: Qt.AlignHCenter
++                Layout.bottomMargin: 6
++                spacing: 2
++
++                Repeater {
++                    model: root.frequentApps
++                    delegate: RippleButton {
++                        id: frequentAppButton
++                        required property var modelData
++                        implicitWidth: 36
++                        implicitHeight: 36
++                        buttonRadius: Appearance.rounding.full
++                        onClicked: {
++                            LauncherSearch.appResult(modelData).execute();
++                            GlobalStates.overviewOpen = false;
++                        }
++                        contentItem: IconImage {
++                            anchors.centerIn: parent
++                            source: Quickshell.iconPath(AppSearch.guessIcon(frequentAppButton.modelData.icon), "application-x-executable")
++                            implicitSize: 24
++                        }
++                        StyledToolTip {
++                            text: frequentAppButton.modelData.name
++                        }
++                    }
++                }
++            }
++
+             Rectangle {
+                 // Separator
+                 visible: root.showResults
+diff --color -ruN a/services/AppSearch.qml files/services/AppSearch.qml
+--- a/services/AppSearch.qml	2026-10-04 17:36:07.346161807 +0500
++++ b/services/AppSearch.qml	2026-10-04 17:36:07.336161729 +0500
+@@ -3,6 +3,8 @@
+ import qs.modules.common
+ import qs.modules.common.functions
+ import Quickshell
++import Quickshell.Io
++import QtQuick
+ 
+ /**
+  * - Eases fuzzy searching for applications by name
+@@ -72,9 +74,70 @@
+         return Fuzzy.go(search, preppedNames, {
+             all: true,
+             key: "name"
+-        }).map(r => {
+-            return r.obj.entry
+-        });
++        }).map(r => ({
++            entry: r.obj.entry,
++            score: r.score + root.usageBoost(r.obj.entry.id)
++        })).sort((a, b) => b.score - a.score)
++            .map(item => item.entry);
++    }
++
++    // App usage tracking (frecency): { "<desktop id>": { "launches": [epochMs, ...] } }
++    property var usage: ({})
++    readonly property int maxLaunchesKept: 20
++    readonly property real halfLifeDays: 7
++
++    // Each launch counts 1, halving every halfLifeDays
++    function frecency(id) {
++        const launches = root.usage[id]?.launches ?? [];
++        const now = Date.now();
++        return launches.reduce((sum, t) => sum + Math.pow(0.5, (now - t) / 86400000 / root.halfLifeDays), 0);
++    }
++
++    function usageBoost(id) {
++        return Math.min(0.3, 0.08 * Math.log(1 + root.frecency(id)));
++    }
++
++    function recordLaunch(id) {
++        const launches = (root.usage[id]?.launches ?? []).concat(Date.now()).slice(-root.maxLaunchesKept);
++        const updated = Object.assign({}, root.usage);
++        updated[id] = { "launches": launches };
++        root.usage = updated;
++        usageFileView.setText(JSON.stringify(root.usage));
++    }
++
++    function frequentApps(limit: int): var {
++        return Object.keys(root.usage)
++            .map(id => ({ id: id, score: root.frecency(id) }))
++            .sort((a, b) => b.score - a.score)
++            .map(item => list.find(app => app.id === item.id))
++            .filter(Boolean)
++            .slice(0, limit);
++    }
++
++    // Converts the old { count, last } format to a launches list
++    function migrateUsage(data) {
++        const migrated = {};
++        for (const id in data) {
++            const item = data[id];
++            migrated[id] = item.launches ? item : { "launches": Array(Math.min(item.count ?? 1, root.maxLaunchesKept)).fill(item.last ?? Date.now()) };
++        }
++        return migrated;
++    }
++
++    FileView {
++        id: usageFileView
++        path: Directories.appUsagePath
++        onLoaded: {
++            try {
++                root.usage = root.migrateUsage(JSON.parse(usageFileView.text()));
++            } catch (e) {
++                root.usage = {};
++            }
++        }
++        onLoadFailed: (error) => {
++            if (error == FileViewError.FileNotFound)
++                usageFileView.setText(JSON.stringify({}));
++        }
+     }
+ 
+     function iconExists(iconName) {
+diff --color -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
+--- a/services/LauncherSearch.qml	2026-10-04 17:36:07.346161807 +0500
++++ b/services/LauncherSearch.qml	2026-10-04 17:36:07.336161729 +0500
+@@ -164,11 +164,51 @@
+         }
+     }
+ 
++    property int frequentAppsLimit: 8
++
++    function appResult(entry) {
++        return resultComp.createObject(null, {
++            type: Translation.tr("App"),
++            id: entry.id,
++            name: entry.name,
++            iconName: entry.icon,
++            iconType: LauncherSearchResult.IconType.System,
++            verb: Translation.tr("Open"),
++            execute: () => {
++                AppSearch.recordLaunch(entry.id);
++                if (!entry.runInTerminal)
++                    entry.execute();
++                else {
++                    // Probably needs more proper escaping, but this will do for now
++                    Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`]);
++                }
++            },
++            comment: entry.comment,
++            runInTerminal: entry.runInTerminal,
++            genericName: entry.genericName,
++            keywords: entry.keywords,
++            actions: entry.actions.map(action => {
++                return resultComp.createObject(null, {
++                    name: action.name,
++                    iconName: action.icon,
++                    iconType: LauncherSearchResult.IconType.System,
++                    execute: () => {
++                        if (!action.runInTerminal)
++                            action.execute();
++                        else {
++                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(action.command.join(' '))}'`]);
++                        }
++                    }
++                });
++            })
++        });
++    }
++
+     property list<var> results: {
+         // Search results are handled here
+         ////////////////// Skip? //////////////////
+         if (root.query == "")
+-            return [];
++            return []; // Frequent apps are shown as an icon row in SearchWidget instead
+ 
+         ///////////// Special cases ///////////////
+         if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
+@@ -239,42 +279,7 @@
+                 Quickshell.clipboardText = root.mathResult;
+             }
+         });
+-        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).map(entry => {
+-            return resultComp.createObject(null, {
+-                type: Translation.tr("App"),
+-                id: entry.id,
+-                name: entry.name,
+-                iconName: entry.icon,
+-                iconType: LauncherSearchResult.IconType.System,
+-                verb: Translation.tr("Open"),
+-                execute: () => {
+-                    if (!entry.runInTerminal)
+-                        entry.execute();
+-                    else {
+-                        // Probably needs more proper escaping, but this will do for now
+-                        Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`]);
+-                    }
+-                },
+-                comment: entry.comment,
+-                runInTerminal: entry.runInTerminal,
+-                genericName: entry.genericName,
+-                keywords: entry.keywords,
+-                actions: entry.actions.map(action => {
+-                    return resultComp.createObject(null, {
+-                        name: action.name,
+-                        iconName: action.icon,
+-                        iconType: LauncherSearchResult.IconType.System,
+-                        execute: () => {
+-                            if (!action.runInTerminal)
+-                                action.execute();
+-                            else {
+-                                Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(action.command.join(' '))}'`]);
+-                            }
+-                        }
+-                    });
+-                })
+-            });
+-        });
++        const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).map(entry => root.appResult(entry));
+         const commandResultObject = resultComp.createObject(null, {
+             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
+             verb: Translation.tr("Run"),
