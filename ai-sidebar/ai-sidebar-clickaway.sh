@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run on every left click (non-consuming bind): hides the AI panel if it is shown and the click landed outside it.
-sleep 0.25  # let a click on the bar's sidebar button toggle first, so we don't reopen it
+sleep 0.08  # let a click on the bar's sidebar button stamp its toggle first (see ai-sidebar-toggled)
 t="${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar-toggled"
 # This click (or a keybind) just toggled the panel itself: leave it alone
 [ -e "$t" ] && [ $(( $(date +%s%3N) - $(cat "$t") )) -lt 1000 ] && exit 0

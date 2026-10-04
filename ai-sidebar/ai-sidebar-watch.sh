@@ -10,7 +10,7 @@ socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     esac
     class=${line#activewindow>>}; class=${class%%,*}
     [ "$class" = ai-sidebar ] && continue
-    sleep 0.15  # let the open/focus sequence settle before deciding
+    sleep 0.05  # let the open/focus sequence settle before deciding
     [ "$(hyprctl activewindow -j | jq -r .class)" = ai-sidebar ] && continue
     "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
 done
