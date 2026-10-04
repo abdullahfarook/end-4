@@ -7,6 +7,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 |---|---|---|
 | `alt-tab/` | ALT+Tab toggles current/previous workspace | `~/.config/hypr/custom/keybinds.lua` |
 | `super-tab/` | SUPER+Tab goes to next workspace and shows the overview; releasing SUPER closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
+| `dolphin-menu/` | Dolphin right-click: "Open in Claude" (kitty + claude) and "Open in VS Code" on folders | `~/.local/share/kio/servicemenus/` |
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
 
 ## Workflow: change, back up, apply, push

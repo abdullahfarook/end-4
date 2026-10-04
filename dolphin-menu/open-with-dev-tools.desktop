@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Service
+MimeType=inode/directory;
+Actions=openClaude;openVSCode;
+X-KDE-Priority=TopLevel
+X-KDE-StartupNotify=false
+
+[Desktop Action openClaude]
+Name=Open in Claude
+Icon=utilities-terminal
+Exec=kitty --directory %f claude
+
+[Desktop Action openVSCode]
+Name=Open in VS Code
+Icon=code
+Exec=code %f
