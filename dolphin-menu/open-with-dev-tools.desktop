@@ -7,10 +7,10 @@ X-KDE-StartupNotify=false
 
 [Desktop Action openClaude]
 Name=Open in Claude
-Icon=utilities-terminal
+Icon=claude-desktop
 Exec=kitty --directory %f claude
 
 [Desktop Action openVSCode]
 Name=Open in VS Code
-Icon=code
+Icon=vscode
 Exec=code %f
