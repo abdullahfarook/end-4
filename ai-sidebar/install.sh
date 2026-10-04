@@ -14,7 +14,7 @@ if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar.patch" >/dev/null 2>
 else
     patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar.patch" && echo "QML patch applied (restart the shell)."
 fi
-for f in ai-sidebar.sh ai-sidebar-watch.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
+for f in ai-sidebar.sh ai-sidebar-watch.sh ai-sidebar-clickaway.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 python3 - "$KEYBINDS" "$REPO/ai-sidebar-keybinds.lua" <<'PY'
 import re, sys
 target, snippet = sys.argv[1], open(sys.argv[2]).read().rstrip("\n")
