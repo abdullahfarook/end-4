@@ -26,3 +26,8 @@ Installers are idempotent: keybind snippets live between `-- >>> name >>>` / `--
 - `super-tab-release.sh`: on ALT release (only if the flag exists) resets the submap, waits 0.15s so the shell's own release handler runs first, then closes the overview.
 - The submap exists because `SUPER+mouse:272` is bound to window-move, which swallows clicks on overview previews while SUPER is held (SUPER+click on previews). Inside the submap that bind is absent. Side effect: other shortcuts defined outside the submap are inactive until ALT is released.
 - The upstream `SUPER + Tab` bind (shell overview toggle) is left at its default; don't edit the upstream file.
+
+## Reset and rollback
+
+- `./reset.sh`: removes all customizations from the live config (stock illogical-impulse); the repo is untouched. Backs up to `~/backups/reset/<timestamp>/`.
+- `./rollback.sh`: runs `reset.sh`, reverts the last commit (`git revert`, history kept), then re-runs every folder's `install.sh`. Needs a clean working tree; keeps your AI sidebar backend choice.
