@@ -7,6 +7,7 @@ if [ "$backend" != claude ] && [ "$backend" != codex ]; then
     exec hyprctl dispatch 'hl.dsp.global("quickshell:sidebarLeftToggle")'
 fi
 # Window title carries the backend so a changed setting replaces a stale window
+nohup "$HOME/.config/hypr/custom/ai-sidebar-watch.sh" >/dev/null 2>&1 &
 title="ai-sidebar-$backend"
 clients=$(hyprctl clients -j)
 stale=$(jq -r '.[] | select(.class=="ai-sidebar" and .title!="'"$title"'") | .address' <<<"$clients")
