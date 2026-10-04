@@ -12,6 +12,5 @@ socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     [ "$class" = ai-sidebar ] && continue
     sleep 0.15  # let the open/focus sequence settle before deciding
     [ "$(hyprctl activewindow -j | jq -r .class)" = ai-sidebar ] && continue
-    hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:ai")' >/dev/null &&
-        hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")' >/dev/null
+    "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
 done
