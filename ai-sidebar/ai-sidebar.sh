@@ -2,6 +2,7 @@
 # Toggles the left AI sidebar. Backend comes from ai.sidebarBackend in the illogical-impulse config:
 #   native -> the shell's own Intelligence sidebar
 #   claude / codex -> a kitty window running that CLI on the "ai" special workspace
+touch "${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar-toggled"  # lets the click-away handler ignore the click that caused this toggle
 backend=$(jq -r '.ai.sidebarBackend // "native"' "$HOME/.config/illogical-impulse/config.json" 2>/dev/null)
 if [ "$backend" != claude ] && [ "$backend" != codex ]; then
     exec hyprctl dispatch 'hl.dsp.global("quickshell:sidebarLeftToggle")'
