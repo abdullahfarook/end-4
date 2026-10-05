@@ -44,7 +44,7 @@
      ContentSection {
 --- a/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.464002327 +0500
 +++ b/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.473628991 +0500
-@@ -15,6 +15,30 @@
+@@ -15,6 +15,29 @@
      property Component contentComponent: SidebarLeftContent {}
      property Item sidebarContent
  
