@@ -12,7 +12,7 @@ socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     [ -z "$class" ] && continue  # focus went to nothing (e.g. opening on an empty workspace): click-away handles outside clicks
     [ "$class" = ai-sidebar ] && continue
     sleep 0.05  # let the open/focus sequence settle before deciding
-    cur=$(hyprctl activewindow -j | jq -r '.class // empty')
+    cur=$(hyprctl activewindow -j | jq -r 'select(.workspace.name != "special:ai") | .class // empty')  # windows on the panel's own workspace don't count as "outside"
     [ -z "$cur" ] || [ "$cur" = ai-sidebar ] && continue
     "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
 done
