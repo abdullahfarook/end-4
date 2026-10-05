@@ -42,8 +42,8 @@
      }
  
      ContentSection {
---- a/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.464002327 +0500
-+++ b/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.473628991 +0500
+--- a/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 06:44:32.069025081 +0500
++++ b/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 06:44:32.069057334 +0500
 @@ -15,6 +15,29 @@
      property Component contentComponent: SidebarLeftContent {}
      property Item sidebarContent
@@ -74,3 +74,13 @@
      function toggleDetach() {
          root.detach = !root.detach;
      }
+@@ -86,7 +109,8 @@
+         
+         sourceComponent: PanelWindow { // Window
+             id: panelWindow
+-            visible: GlobalStates.sidebarLeftOpen
++            // Never show the native panel for a terminal backend: even a brief show steals focus and closes the AI window on empty workspaces
++            visible: GlobalStates.sidebarLeftOpen && Config.options.ai.sidebarBackend === "native"
+             
+             property bool extend: false
+             property real sidebarWidth: panelWindow.extend ? Appearance.sizes.sidebarWidthExtended : Appearance.sizes.sidebarWidth
