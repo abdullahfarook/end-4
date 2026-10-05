@@ -1,7 +1,7 @@
 diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/PerformancePopup.qml
 --- a/modules/ii/bar/PerformancePopup.qml	1970-01-01 05:00:00.000000000 +0500
-+++ b/modules/ii/bar/PerformancePopup.qml	2026-10-05 16:59:31.239446899 +0500
-@@ -0,0 +1,132 @@
++++ b/modules/ii/bar/PerformancePopup.qml	2026-10-05 17:03:56.783378940 +0500
+@@ -0,0 +1,135 @@
 +import qs.services
 +import qs.modules.common
 +import qs.modules.common.widgets
@@ -21,7 +21,10 @@ diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/Perfo
 +    readonly property string fanScript: Directories.home + "/.config/hypr/custom/fan-control.sh"
 +
 +    anchor.window: target.QsWindow.window
-+    anchor.item: target
++    anchor.onAnchoring: {
++        const p = target.QsWindow.mapFromItem(target, 0, 0);
++        anchor.rect = Qt.rect(p.x, p.y, target.width, target.height);
++    }
 +    anchor.edges: Config.options.bar.bottom ? Edges.Top : Edges.Bottom
 +    anchor.gravity: anchor.edges === Edges.Top ? Edges.Top : Edges.Bottom
 +    anchor.adjustment: PopupAdjustment.All
