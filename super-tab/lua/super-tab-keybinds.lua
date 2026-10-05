@@ -23,7 +23,11 @@ local function super_tab(step)
         local cur = hl.get_active_workspace()
         if cur then mru_push(cur.id) end
         local list = {}
-        for _, id in ipairs(mru) do list[#list + 1] = id end  -- empty workspaces are included: focusing one recreates it
+        for _, id in ipairs(mru) do  -- skip workspaces that no longer exist (empty ones are removed by Hyprland)
+            for _, w in ipairs(hl.get_workspaces()) do
+                if w.id == id then list[#list + 1] = id break end
+            end
+        end
         session = { list = list, i = 1 }
         hl.dispatch(hl.dsp.submap("super-tab"))
     end
