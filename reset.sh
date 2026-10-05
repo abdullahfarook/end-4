@@ -31,7 +31,7 @@ fi
 pkill -f ai-sidebar-watch.sh 2>/dev/null || true
 rm -f "$H"/super-tab.sh "$H"/super-tab-release.sh "$H"/ai-sidebar.sh "$H"/ai-sidebar-watch.sh "$H"/ai-sidebar-clickaway.sh "$H"/ai-sidebar-hide.sh
 # 3. QML patches (reverse only if currently applied)
-for p in "$REPO/ai-sidebar/ai-sidebar.patch" "$REPO/widgets/frequent-apps.patch"; do
+for p in "$REPO/cpu-info/cpu-info.patch" "$REPO/ai-sidebar/ai-sidebar.patch" "$REPO/widgets/frequent-apps.patch"; do
     [ -f "$p" ] || continue
     if patch -d "$Q" -p1 -R --dry-run -s -f < "$p" >/dev/null 2>&1; then
         patch -d "$Q" -p1 -R -s -f --no-backup-if-mismatch < "$p"; echo "Reverted $(basename "$p")"

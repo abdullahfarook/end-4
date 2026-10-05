@@ -1,0 +1,57 @@
+--- a/services/ResourceUsage.qml	2026-10-05 05:53:22.695275064 +0500
++++ b/services/ResourceUsage.qml	2026-10-05 05:53:22.705459510 +0500
+@@ -25,6 +25,8 @@
+     property string maxAvailableMemoryString: kbToGbString(ResourceUsage.memoryTotal)
+     property string maxAvailableSwapString: kbToGbString(ResourceUsage.swapTotal)
+     property string maxAvailableCpuString: "--"
++    property real cpuFreqGHz: 0 // average current clock across all cores
++    property real cpuTempC: 0 // CPU package temperature
+ 
+     readonly property int historyLength: Config?.options.resources.historyLength ?? 60
+     property list<real> cpuUsageHistory: []
+@@ -100,6 +102,25 @@
+ 	FileView { id: fileMeminfo; path: "/proc/meminfo" }
+     FileView { id: fileStat; path: "/proc/stat" }
+ 
++    Timer {
++        interval: Config.options?.resources?.updateInterval ?? 3000
++        running: true
++        repeat: true
++        triggeredOnStart: true
++        onTriggered: cpuInfoProc.running = true
++    }
++    Process {
++        id: cpuInfoProc
++        command: ["bash", "-c", "f=$(awk '/cpu MHz/{s+=$4;n++}END{printf \"%d\", s/n}' /proc/cpuinfo); for d in /sys/class/hwmon/hwmon*; do [ \"$(cat $d/name 2>/dev/null)\" = coretemp ] && t=$(cat $d/temp1_input); done; echo \"$f ${t:-0}\""]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const [mhz, millideg] = text.trim().split(" ").map(Number);
++                root.cpuFreqGHz = (mhz || 0) / 1000;
++                root.cpuTempC = (millideg || 0) / 1000;
++            }
++        }
++    }
++
+     Process {
+         id: findCpuMaxFreqProc
+         environment: ({
+--- a/modules/ii/bar/ResourcesPopup.qml	2026-10-05 05:53:22.695841063 +0500
++++ b/modules/ii/bar/ResourcesPopup.qml	2026-10-05 05:53:22.706187243 +0500
+@@ -88,6 +88,17 @@
+                     label: Translation.tr("Load:")
+                     value: `${Math.round(ResourceUsage.cpuUsage * 100)}%`
+                 }
++                StyledPopupValueRow {
++                    icon: "speed"
++                    label: Translation.tr("Speed:")
++                    value: `${ResourceUsage.cpuFreqGHz.toFixed(2)} GHz`
++                }
++                StyledPopupValueRow {
++                    icon: "device_thermostat"
++                    label: Translation.tr("Temp:")
++                    value: `${Math.round(ResourceUsage.cpuTempC)}°C`
++                    visible: ResourceUsage.cpuTempC > 0
++                }
+             }
+         }
+     }
