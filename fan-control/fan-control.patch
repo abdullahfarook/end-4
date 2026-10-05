@@ -1,9 +1,10 @@
 diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/PerformancePopup.qml
 --- a/modules/ii/bar/PerformancePopup.qml	1970-01-01 05:00:00.000000000 +0500
-+++ b/modules/ii/bar/PerformancePopup.qml	2026-10-05 17:03:56.783378940 +0500
-@@ -0,0 +1,135 @@
++++ b/modules/ii/bar/PerformancePopup.qml	2026-10-05 17:06:13.163903952 +0500
+@@ -0,0 +1,136 @@
 +import qs.services
 +import qs.modules.common
++import qs.modules.common.functions
 +import qs.modules.common.widgets
 +import QtQuick
 +import QtQuick.Layouts
@@ -18,7 +19,7 @@ diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/Perfo
 +    property string fanMode: "auto"
 +    property int cpuFan: 50
 +    property int gpuFan: 50
-+    readonly property string fanScript: Directories.home + "/.config/hypr/custom/fan-control.sh"
++    readonly property string fanScript: FileUtils.trimFileProtocol(Directories.home) + "/.config/hypr/custom/fan-control.sh"
 +
 +    anchor.window: target.QsWindow.window
 +    anchor.onAnchoring: {
