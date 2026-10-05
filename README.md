@@ -5,7 +5,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 
 | Folder | What it does | Applies to |
 |---|---|---|
-| `super-tab/` | ALT+Tab goes to next workspace and shows the overview; releasing ALT closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
+| `super-tab/` | Windows-style ALT+Tab on workspaces (most-recently-used order: tap = previous, hold + Tab = further back, Shift+Tab = forward), shows the overview; releasing ALT closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
 | `dolphin-menu/` | Dolphin right-click: "Open in Claude" (kitty + claude) and "Open in VS Code" on folders | `~/.local/share/kio/servicemenus/` |
 | `ai-sidebar/` | Optional left sidebar backend: native Intelligence panel, or kitty running Claude Code / Codex (Settings → Services → AI) | `~/.config/quickshell/ii/` (Config + Settings patch), `~/.config/hypr/custom/` (script + SUPER+A/B/O) |
 | `fan-control/` | Bar performance button opens a click popup: power profile + Acer fan Auto/Max/Manual with CPU/GPU sliders; saved and re-applied after login/resume | `~/.config/quickshell/ii/` (patch), `~/.config/hypr/custom/` (scripts), system service (one-time sudo) |
@@ -24,7 +24,8 @@ Installers are idempotent: keybind snippets live between `-- >>> name >>>` / `--
 ## super-tab internals
 
 - Hyprland here uses the **Lua config**. Legacy dispatch syntax fails; use e.g. `hyprctl dispatch 'hl.dsp.focus({ workspace = "e+1" })'`.
-- `super-tab.sh`: sets a flag file, enters the `super-tab` submap, goes to the next workspace, opens the overview (`qs -c ii ipc call search open`) if the `quickshell:overview` layer is absent.
+- `super-tab.sh`: sets a flag file, enters the `super-tab` submap, goes to the next workspace in MRU order (list snapshotted from `ws-mru-watch.sh`'s history file at session start), opens the overview (`qs -c ii ipc call search open`) if the `quickshell:overview` layer is absent.
+- `ws-mru-watch.sh`: single-instance socket2 listener recording workspace focus history in `$XDG_RUNTIME_DIR/ws-mru` (ignores changes during an ALT+Tab session; the release script records the final workspace). Autostarted from the keybind snippet via `hyprland.start`.
 - `super-tab-release.sh`: on ALT release (only if the flag exists) resets the submap, waits 0.15s so the shell's own release handler runs first, then closes the overview.
 - The submap exists because `SUPER+mouse:272` is bound to window-move, which swallows clicks on overview previews while SUPER is held (SUPER+click on previews). Inside the submap that bind is absent. Side effect: other shortcuts defined outside the submap are inactive until ALT is released.
 - The upstream `SUPER + Tab` bind (shell overview toggle) is left at its default; don't edit the upstream file.
