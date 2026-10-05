@@ -28,6 +28,7 @@ Installers are idempotent: keybind snippets live between `-- >>> name >>>` / `--
 - `ws-mru-watch.sh`: single-instance socket2 listener recording workspace focus history in `$XDG_RUNTIME_DIR/ws-mru` (ignores changes during an ALT+Tab session; the release script records the final workspace). Autostarted from the keybind snippet via `hyprland.start`.
 - `super-tab-release.sh`: on ALT release (only if the flag exists) resets the submap, waits 0.15s so the shell's own release handler runs first, then closes the overview.
 - The submap exists because `SUPER+mouse:272` is bound to window-move, which swallows clicks on overview previews while SUPER is held (SUPER+click on previews). Inside the submap that bind is absent. Side effect: other shortcuts defined outside the submap are inactive until ALT is released.
+- `super-tab/lua/` is an alternative, pure-Lua implementation (history via `hl.on("workspace.active")`, no watcher or scripts). Install one or the other, not both: each `install.sh` removes/replaces the other's snippet block, but the Lua one also deletes the helper scripts.
 - The upstream `SUPER + Tab` bind (shell overview toggle) is left at its default; don't edit the upstream file.
 
 ## Reset and rollback
