@@ -44,7 +44,7 @@
      ContentSection {
 --- a/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.464002327 +0500
 +++ b/modules/ii/sidebarLeft/SidebarLeft.qml	2026-10-05 04:06:41.473628991 +0500
-@@ -15,6 +15,21 @@
+@@ -15,6 +15,30 @@
      property Component contentComponent: SidebarLeftContent {}
      property Item sidebarContent
  
@@ -54,9 +54,17 @@
 +        function onSidebarLeftOpenChanged() {
 +            if (GlobalStates.sidebarLeftOpen && Config.options.ai.sidebarBackend !== "native") {
 +                GlobalStates.sidebarLeftOpen = false;
-+                aiSidebarProc.running = true;
++                // The bar button and the bar's mouse area both toggle on one click: only launch once per click
++                if (!aiSidebarDebounce.running) {
++                    aiSidebarDebounce.start();
++                    aiSidebarProc.running = true;
++                }
 +            }
 +        }
++    }
++    Timer {
++        id: aiSidebarDebounce
++        interval: 300
 +    }
 +    Process {
 +        id: aiSidebarProc
