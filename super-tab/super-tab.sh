@@ -6,8 +6,7 @@
 flag="$rt/super-tab-active"; list="$rt/super-tab-list"
 if [ ! -e "$flag" ]; then
     mru_push "$(hyprctl activeworkspace -j | jq -r .id)"
-    existing=$(hyprctl workspaces -j | jq -r '.[] | select(.id > 0) | .id')
-    grep -Fx -f <(echo "$existing") "$mru_file" >"$list"
+    cp "$mru_file" "$list"  # includes empty workspaces: focusing one recreates it
     echo 0 >"$flag"
     hyprctl dispatch 'hl.dsp.submap("super-tab")' >/dev/null
 fi
