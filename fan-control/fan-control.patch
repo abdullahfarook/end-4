@@ -1,0 +1,191 @@
+diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/PerformancePopup.qml
+--- a/modules/ii/bar/PerformancePopup.qml	1970-01-01 05:00:00.000000000 +0500
++++ b/modules/ii/bar/PerformancePopup.qml	2026-10-05 16:59:31.239446899 +0500
+@@ -0,0 +1,132 @@
++import qs.services
++import qs.modules.common
++import qs.modules.common.widgets
++import QtQuick
++import QtQuick.Layouts
++import Quickshell
++import Quickshell.Io
++import Quickshell.Services.UPower
++
++// Click-to-open panel: power profile + Acer fan control (see ~/.config/hypr/custom/fan-control.sh)
++PopupWindow {
++    id: root
++    required property Item target
++    property string fanMode: "auto"
++    property int cpuFan: 50
++    property int gpuFan: 50
++    readonly property string fanScript: Directories.home + "/.config/hypr/custom/fan-control.sh"
++
++    anchor.window: target.QsWindow.window
++    anchor.item: target
++    anchor.edges: Config.options.bar.bottom ? Edges.Top : Edges.Bottom
++    anchor.gravity: anchor.edges === Edges.Top ? Edges.Top : Edges.Bottom
++    anchor.adjustment: PopupAdjustment.All
++    grabFocus: true
++    color: "transparent"
++    implicitWidth: card.implicitWidth + 16
++    implicitHeight: card.implicitHeight + 16
++
++    onVisibleChanged: if (visible) readState.running = true
++
++    Process {
++        id: readState
++        command: [root.fanScript, "get"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const p = text.trim().split(" ");
++                if (p.length < 3) return;
++                root.fanMode = p[0];
++                root.cpuFan = parseInt(p[1]);
++                root.gpuFan = parseInt(p[2]);
++            }
++        }
++    }
++
++    function setFan(mode) {
++        fanMode = mode;
++        Quickshell.execDetached(mode === "manual" ? [fanScript, "manual", `${cpuFan}`, `${gpuFan}`] : [fanScript, mode]);
++    }
++    function commitManual() {
++        Quickshell.execDetached([fanScript, "manual", `${cpuFan}`, `${gpuFan}`]);
++    }
++
++    component ChoiceButton: RippleButton {
++        id: btn
++        property string symbol
++        property string label
++        Layout.fillWidth: true
++        implicitHeight: 52
++        buttonRadius: Appearance.rounding.small
++        colBackground: Appearance.colors.colLayer2
++        colBackgroundToggled: Appearance.colors.colPrimary
++        contentItem: ColumnLayout {
++            spacing: 0
++            MaterialSymbol {
++                Layout.alignment: Qt.AlignHCenter
++                text: btn.symbol
++                iconSize: Appearance.font.pixelSize.larger
++                color: btn.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
++            }
++            StyledText {
++                Layout.alignment: Qt.AlignHCenter
++                text: btn.label
++                font.pixelSize: Appearance.font.pixelSize.smaller
++                color: btn.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
++            }
++        }
++    }
++
++    component FanSlider: RowLayout {
++        id: row
++        property string label
++        property alias value: slider.value
++        signal released()
++        spacing: 8
++        StyledText { text: row.label; Layout.preferredWidth: 32; color: Appearance.colors.colOnLayer1 }
++        StyledSlider {
++            id: slider
++            Layout.fillWidth: true
++            Layout.preferredWidth: 200
++            from: 5; to: 100; stepSize: 5
++            enabled: root.fanMode === "manual"
++            opacity: enabled ? 1 : 0.5
++            onPressedChanged: if (!pressed) row.released()
++        }
++        StyledText { text: `${Math.round(slider.value)}%`; Layout.preferredWidth: 38; horizontalAlignment: Text.AlignRight; color: Appearance.colors.colOnLayer1 }
++    }
++
++    Rectangle {
++        id: card
++        anchors.centerIn: parent
++        implicitWidth: col.implicitWidth + 28
++        implicitHeight: col.implicitHeight + 28
++        color: Appearance.m3colors.m3surfaceContainer
++        radius: Appearance.rounding.normal
++        border.width: 1
++        border.color: Appearance.colors.colLayer0Border
++
++        ColumnLayout {
++            id: col
++            anchors.centerIn: parent
++            spacing: 8
++
++            StyledText { text: Translation.tr("Performance profile"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
++            RowLayout {
++                spacing: 6
++                ChoiceButton { symbol: "energy_savings_leaf"; label: Translation.tr("Quiet"); toggled: PowerProfiles.profile === PowerProfile.PowerSaver; onClicked: PowerProfiles.profile = PowerProfile.PowerSaver }
++                ChoiceButton { symbol: "airwave"; label: Translation.tr("Balanced"); toggled: PowerProfiles.profile === PowerProfile.Balanced; onClicked: PowerProfiles.profile = PowerProfile.Balanced }
++                ChoiceButton { symbol: "local_fire_department"; label: Translation.tr("Performance"); visible: PowerProfiles.hasPerformanceProfile; toggled: PowerProfiles.profile === PowerProfile.Performance; onClicked: PowerProfiles.profile = PowerProfile.Performance }
++            }
++
++            StyledText { Layout.topMargin: 4; text: Translation.tr("Fan speed"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
++            RowLayout {
++                spacing: 6
++                ChoiceButton { symbol: "auto_awesome"; label: Translation.tr("Auto"); toggled: root.fanMode === "auto"; onClicked: root.setFan("auto") }
++                ChoiceButton { symbol: "mode_fan"; label: Translation.tr("Max"); toggled: root.fanMode === "max"; onClicked: root.setFan("max") }
++                ChoiceButton { symbol: "tune"; label: Translation.tr("Manual"); toggled: root.fanMode === "manual"; onClicked: root.setFan("manual") }
++            }
++            FanSlider { label: "CPU"; value: root.cpuFan; onValueChanged: root.cpuFan = Math.round(value); onReleased: root.commitManual() }
++            FanSlider { label: "GPU"; value: root.gpuFan; onValueChanged: root.gpuFan = Math.round(value); onReleased: root.commitManual() }
++        }
++    }
++}
+diff --color -ruN pa/modules/ii/bar/UtilButtons.qml pb/modules/ii/bar/UtilButtons.qml
+--- a/modules/ii/bar/UtilButtons.qml	2026-10-05 16:59:31.238201721 +0500
++++ b/modules/ii/bar/UtilButtons.qml	2026-10-05 16:59:31.239391520 +0500
+@@ -125,32 +125,29 @@
+         Loader {
+             active: Config.options.bar.utilButtons.showPerformanceProfileToggle
+             visible: Config.options.bar.utilButtons.showPerformanceProfileToggle
+-            sourceComponent: CircleUtilButton {
++            sourceComponent: Item {
++                implicitWidth: perfButton.implicitWidth
++                implicitHeight: perfButton.implicitHeight
+                 Layout.alignment: Qt.AlignVCenter
+-                onClicked: event => {
+-                    if (PowerProfiles.hasPerformanceProfile) {
+-                        switch(PowerProfiles.profile) {
+-                            case PowerProfile.PowerSaver: PowerProfiles.profile = PowerProfile.Balanced
+-                            break;
+-                            case PowerProfile.Balanced: PowerProfiles.profile = PowerProfile.Performance
+-                            break;
+-                            case PowerProfile.Performance: PowerProfiles.profile = PowerProfile.PowerSaver
+-                            break;
++                CircleUtilButton {
++                    id: perfButton
++                    onClicked: perfPopup.visible = !perfPopup.visible
++                    MaterialSymbol {
++                        horizontalAlignment: Qt.AlignHCenter
++                        fill: 0
++                        text: switch(PowerProfiles.profile) {
++                            case PowerProfile.PowerSaver: return "energy_savings_leaf"
++                            case PowerProfile.Balanced: return "airwave"
++                            case PowerProfile.Performance: return "local_fire_department"
+                         }
+-                    } else {
+-                        PowerProfiles.profile = PowerProfiles.profile == PowerProfile.Balanced ? PowerProfile.PowerSaver : PowerProfile.Balanced
++                        iconSize: Appearance.font.pixelSize.large
++                        color: Appearance.colors.colOnLayer2
+                     }
+                 }
+-                MaterialSymbol {
+-                    horizontalAlignment: Qt.AlignHCenter
+-                    fill: 0
+-                    text: switch(PowerProfiles.profile) {
+-                        case PowerProfile.PowerSaver: return "energy_savings_leaf"
+-                        case PowerProfile.Balanced: return "airwave"
+-                        case PowerProfile.Performance: return "local_fire_department"
+-                    }
+-                    iconSize: Appearance.font.pixelSize.large
+-                    color: Appearance.colors.colOnLayer2
++                PerformancePopup {
++                    id: perfPopup
++                    target: perfButton
++                    visible: false
+                 }
+             }
+         }
