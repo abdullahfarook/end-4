@@ -10,6 +10,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 | `ai-sidebar/` | Optional left sidebar backend: native Intelligence panel, or kitty running Claude Code / Codex (Settings → Services → AI) | `~/.config/quickshell/ii/` (Config + Settings patch), `~/.config/hypr/custom/` (script + SUPER+A/B/O) |
 | `fan-control/` | Bar performance button opens a click popup: power profile + Acer fan Auto/Max/Manual with CPU/GPU sliders; saved and re-applied after login/resume | `~/.config/quickshell/ii/` (patch), `~/.config/hypr/custom/` (scripts), system service (one-time sudo) |
 | `cpu-info/` | CPU Speed (avg GHz) and Temp (package °C) rows in the bar's resources popup | `~/.config/quickshell/ii/` (ResourceUsage + ResourcesPopup patch) |
+| `cursor/` | Pointer no longer jumps back to a dialog (`cursor.no_warps = true`) | `~/.config/hypr/hyprland/general.lua` |
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
 
 ## Workflow: change, back up, apply, push
@@ -32,6 +33,8 @@ Installers are idempotent: keybind snippets live between `-- >>> name >>>` / `--
 - The upstream `SUPER + Tab` bind (shell overview toggle) is left at its default; don't edit the upstream file.
 
 ## Reset and rollback
+
+- `./backup.sh`: snapshots the whole live config (`~/.config/hypr`, `quickshell/ii`, `illogical-impulse`, Dolphin menus) to `~/backups/full/<timestamp>/`, keeping the 10 newest.
 
 - `./reset.sh`: removes all customizations from the live config (stock illogical-impulse); the repo is untouched. Backs up to `~/backups/reset/<timestamp>/`.
 - `./rollback.sh`: runs `reset.sh`, reverts the last commit (`git revert`, history kept), then re-runs every folder's `install.sh`. Needs a clean working tree; keeps your AI sidebar backend choice.

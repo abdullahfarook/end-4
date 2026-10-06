@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Hides the ai-sidebar special workspace when focus moves to another window (click outside), like the native sidebar.
+# Hides the ai-sidebar special workspace when focus moves to another window (click outside), like the native sidebar,
+# or when the shell's launcher/overview opens (SUPER).
 # Started by ai-sidebar.sh; exits with the Hyprland session.
 exec 9>"$XDG_RUNTIME_DIR/ai-sidebar-watch.lock"; flock -n 9 || exit 0  # single instance
 sock="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     case "$line" in
+    openlayer\>\>quickshell:overview) "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"; continue ;;  # SUPER launcher/overview opened: close the panel
     activewindow\>\>*) ;;
     *) continue ;;
     esac
