@@ -1,0 +1,15 @@
+--- a/modules/ii/bar/BarContent.qml
++++ b/modules/ii/bar/BarContent.qml
+@@ -89,6 +89,12 @@
+                 colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
+             }
+ 
++            VscodeGitButton { // Git panel button
++                Layout.alignment: Qt.AlignVCenter
++                Layout.leftMargin: 2
++                colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
++            }
++
+             ActiveWindow {
+                 Layout.leftMargin: 10 + (leftSidebarButton.visible ? 0 : Appearance.rounding.screenRounding)
+                 Layout.rightMargin: Appearance.rounding.screenRounding

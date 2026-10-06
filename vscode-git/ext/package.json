@@ -1,0 +1,50 @@
+{
+  "name": "gitpanel",
+  "publisher": "local",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitpanel.openFolder",
+        "title": "Open Folder\u2026",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "gitpanel.openRecent",
+        "title": "Switch Recent Folder\u2026",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gitpanel.addFolder",
+        "title": "Add Folder to Panel",
+        "icon": "$(new-folder)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitpanel.openFolder",
+          "when": "view == workbench.scm || view == workbench.explorer.fileView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitpanel.openRecent",
+          "when": "view == workbench.scm || view == workbench.explorer.fileView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitpanel.addFolder",
+          "when": "view == workbench.scm || view == workbench.explorer.fileView",
+          "group": "navigation@3"
+        }
+      ]
+    }
+  }
+}
