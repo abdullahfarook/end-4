@@ -58,7 +58,7 @@
  
          Resource {
 +            iconName: "developer_board"
-+            percentage: ResourceUsage.gpuMemUsedPercentage
++            percentage: ResourceUsage.gpuUsage
 +            shown: ResourceUsage.gpuAvailable
 +            warningThreshold: 90
 +        }
@@ -71,31 +71,45 @@
          }
 --- a/modules/ii/bar/ResourcesPopup.qml
 +++ b/modules/ii/bar/ResourcesPopup.qml
-@@ -17,6 +17,35 @@
-         spacing: 12
+@@ -12,31 +12,70 @@
+         return (kb / (1024 * 1024)).toFixed(1) + " GB";
+     }
  
-         Column {
+-    Row {
++    RowLayout {
+         anchors.centerIn: parent
+-        spacing: 12
++        spacing: 20
+ 
+-        Column {
+-            anchors.top: parent.top
++        ColumnLayout {
 +            visible: ResourceUsage.gpuAvailable
-+            anchors.top: parent.top
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
 +            spacing: 8
 +
 +            StyledPopupHeaderRow {
 +                icon: "developer_board"
 +                label: "GPU"
 +            }
-+            Column {
++            ColumnLayout {
++                Layout.fillWidth: true
 +                spacing: 4
 +                StyledPopupValueRow {
++                    Layout.fillWidth: true
 +                    icon: "bolt"
 +                    label: Translation.tr("Load:")
 +                    value: `${Math.round(ResourceUsage.gpuUsage * 100)}%`
 +                }
 +                StyledPopupValueRow {
++                    Layout.fillWidth: true
 +                    icon: "clock_loader_60"
 +                    label: Translation.tr("Used:")
 +                    value: `${(ResourceUsage.gpuMemUsedMiB / 1024).toFixed(1)} GB`
 +                }
 +                StyledPopupValueRow {
++                    Layout.fillWidth: true
 +                    icon: "check_circle"
 +                    label: Translation.tr("Free:")
 +                    value: `${((ResourceUsage.gpuMemTotalMiB - ResourceUsage.gpuMemUsedMiB) / 1024).toFixed(1)} GB`
@@ -103,7 +117,106 @@
 +            }
 +        }
 +
-+        Column {
-             anchors.top: parent.top
++        ColumnLayout {
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
              spacing: 8
  
+             StyledPopupHeaderRow {
+                 icon: "memory"
+                 label: "RAM"
+             }
+-            Column {
++            ColumnLayout {
++                Layout.fillWidth: true
+                 spacing: 4
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "clock_loader_60"
+                     label: Translation.tr("Used:")
+                     value: root.formatKB(ResourceUsage.memoryUsed)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "check_circle"
+                     label: Translation.tr("Free:")
+                     value: root.formatKB(ResourceUsage.memoryFree)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "empty_dashboard"
+                     label: Translation.tr("Total:")
+                     value: root.formatKB(ResourceUsage.memoryTotal)
+@@ -44,28 +83,33 @@
+             }
+         }
+ 
+-        Column {
++        ColumnLayout {
+             visible: ResourceUsage.swapTotal > 0
+-            anchors.top: parent.top
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
+             spacing: 8
+ 
+             StyledPopupHeaderRow {
+                 icon: "swap_horiz"
+                 label: "Swap"
+             }
+-            Column {
++            ColumnLayout {
++                Layout.fillWidth: true
+                 spacing: 4
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "clock_loader_60"
+                     label: Translation.tr("Used:")
+                     value: root.formatKB(ResourceUsage.swapUsed)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "check_circle"
+                     label: Translation.tr("Free:")
+                     value: root.formatKB(ResourceUsage.swapFree)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "empty_dashboard"
+                     label: Translation.tr("Total:")
+                     value: root.formatKB(ResourceUsage.swapTotal)
+@@ -73,27 +117,32 @@
+             }
+         }
+ 
+-        Column {
+-            anchors.top: parent.top
++        ColumnLayout {
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
+             spacing: 8
+ 
+             StyledPopupHeaderRow {
+                 icon: "planner_review"
+                 label: "CPU"
+             }
+-            Column {
++            ColumnLayout {
++                Layout.fillWidth: true
+                 spacing: 4
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "bolt"
+                     label: Translation.tr("Load:")
+                     value: `${Math.round(ResourceUsage.cpuUsage * 100)}%`
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "speed"
+                     label: Translation.tr("Speed:")
+                     value: `${ResourceUsage.cpuFreqGHz.toFixed(2)} GHz`
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "device_thermostat"
+                     label: Translation.tr("Temp:")
+                     value: `${Math.round(ResourceUsage.cpuTempC)}°C`
