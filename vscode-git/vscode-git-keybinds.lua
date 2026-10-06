@@ -1,6 +1,6 @@
 -- >>> vscode-git >>>
--- Git panel: dedicated VS Code (Source Control + diff only) on special:vgit, opened from the bar button or SUPER + G.
-hl.bind("SUPER + G", hl.dsp.exec_cmd("~/.config/hypr/custom/vscode-git.sh"), { description = "Toggle Git panel" })
+-- Git panel: dedicated VS Code (Source Control + diff only) on special:vgit, opened from the bar button or SUPER + Z.
+hl.bind("SUPER + Z", hl.dsp.exec_cmd("~/.config/hypr/custom/vscode-git.sh"), { description = "Toggle Git panel" })
 local vg = { title = "⎇" }
 hl.window_rule({ match = vg, float = true })
 hl.window_rule({ match = vg, workspace = "special:vgit" })

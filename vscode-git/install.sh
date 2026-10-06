@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the Git panel: dedicated minimal VS Code (own profile in ~/.local/share/vscode-git), bar button, SUPER+G, scripts, rules.
+# Installs the Git panel: dedicated minimal VS Code (own profile in ~/.local/share/vscode-git), bar button, SUPER+Z, scripts, rules.
 # Edit the repos shown in the panel in ~/.local/share/vscode-git/ws/git-panel.code-workspace (seeded once from ws.template.json).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
