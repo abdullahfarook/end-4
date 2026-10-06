@@ -19,7 +19,7 @@ if jq -e '.[] | select(.class=="ai-sidebar" and .title=="'"$title"'")' <<<"$clie
 else
     # Resume the last conversation (survives restart/logout); start a new one if there is none
     case $backend in
-        claude) cmd='claude --continue || exec claude' ;;
+        claude) cmd='f="$HOME/repos/end-4/claude/shell.md"; set -- ; [ -r "$f" ] && set -- --append-system-prompt-file "$f"; claude --continue "$@" || exec claude "$@"' ;;
         codex)  cmd='codex resume --last || exec codex' ;;
     esac
     nohup kitty --class ai-sidebar --title "$title" -d "$HOME" sh -c "$cmd" >/dev/null 2>&1 9>&- &
