@@ -53,25 +53,24 @@
          id: findCpuMaxFreqProc
 --- a/modules/ii/bar/Resources.qml
 +++ b/modules/ii/bar/Resources.qml
-@@ -20,7 +20,15 @@
-         anchors.rightMargin: 4
+@@ -36,6 +36,14 @@
+         }
  
          Resource {
 +            iconName: "developer_board"
 +            percentage: ResourceUsage.gpuUsage
 +            shown: ResourceUsage.gpuAvailable
++            Layout.leftMargin: shown ? 6 : 0
 +            warningThreshold: 90
 +        }
 +
 +        Resource {
-             iconName: "memory"
-+            Layout.leftMargin: ResourceUsage.gpuAvailable ? 6 : 0
-             percentage: ResourceUsage.memoryUsedPercentage
-             warningThreshold: Config.options.bar.resources.memoryWarningThreshold
-         }
+             iconName: "planner_review"
+             percentage: ResourceUsage.cpuUsage
+             shown: Config.options.bar.resources.alwaysShowCpu || 
 --- a/modules/ii/bar/ResourcesPopup.qml
 +++ b/modules/ii/bar/ResourcesPopup.qml
-@@ -12,31 +12,70 @@
+@@ -12,31 +12,36 @@
          return (kb / (1024 * 1024)).toFixed(1) + " GB";
      }
  
@@ -80,6 +79,79 @@
          anchors.centerIn: parent
 -        spacing: 12
 +        spacing: 20
+ 
+-        Column {
+-            anchors.top: parent.top
++        ColumnLayout {
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
+             spacing: 8
+ 
+             StyledPopupHeaderRow {
+                 icon: "memory"
+                 label: "RAM"
+             }
+-            Column {
++            ColumnLayout {
++                Layout.fillWidth: true
+                 spacing: 4
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "clock_loader_60"
+                     label: Translation.tr("Used:")
+                     value: root.formatKB(ResourceUsage.memoryUsed)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "check_circle"
+                     label: Translation.tr("Free:")
+                     value: root.formatKB(ResourceUsage.memoryFree)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "empty_dashboard"
+                     label: Translation.tr("Total:")
+                     value: root.formatKB(ResourceUsage.memoryTotal)
+@@ -44,28 +49,33 @@
+             }
+         }
+ 
+-        Column {
++        ColumnLayout {
+             visible: ResourceUsage.swapTotal > 0
+-            anchors.top: parent.top
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
+             spacing: 8
+ 
+             StyledPopupHeaderRow {
+                 icon: "swap_horiz"
+                 label: "Swap"
+             }
+-            Column {
++            ColumnLayout {
++                Layout.fillWidth: true
+                 spacing: 4
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "clock_loader_60"
+                     label: Translation.tr("Used:")
+                     value: root.formatKB(ResourceUsage.swapUsed)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "check_circle"
+                     label: Translation.tr("Free:")
+                     value: root.formatKB(ResourceUsage.swapFree)
+                 }
+                 StyledPopupValueRow {
++                    Layout.fillWidth: true
+                     icon: "empty_dashboard"
+                     label: Translation.tr("Total:")
+                     value: root.formatKB(ResourceUsage.swapTotal)
+@@ -73,27 +83,66 @@
+             }
+         }
  
 -        Column {
 -            anchors.top: parent.top
@@ -117,79 +189,6 @@
 +            }
 +        }
 +
-+        ColumnLayout {
-+            Layout.alignment: Qt.AlignTop
-+            Layout.fillWidth: true
-             spacing: 8
- 
-             StyledPopupHeaderRow {
-                 icon: "memory"
-                 label: "RAM"
-             }
--            Column {
-+            ColumnLayout {
-+                Layout.fillWidth: true
-                 spacing: 4
-                 StyledPopupValueRow {
-+                    Layout.fillWidth: true
-                     icon: "clock_loader_60"
-                     label: Translation.tr("Used:")
-                     value: root.formatKB(ResourceUsage.memoryUsed)
-                 }
-                 StyledPopupValueRow {
-+                    Layout.fillWidth: true
-                     icon: "check_circle"
-                     label: Translation.tr("Free:")
-                     value: root.formatKB(ResourceUsage.memoryFree)
-                 }
-                 StyledPopupValueRow {
-+                    Layout.fillWidth: true
-                     icon: "empty_dashboard"
-                     label: Translation.tr("Total:")
-                     value: root.formatKB(ResourceUsage.memoryTotal)
-@@ -44,28 +83,33 @@
-             }
-         }
- 
--        Column {
-+        ColumnLayout {
-             visible: ResourceUsage.swapTotal > 0
--            anchors.top: parent.top
-+            Layout.alignment: Qt.AlignTop
-+            Layout.fillWidth: true
-             spacing: 8
- 
-             StyledPopupHeaderRow {
-                 icon: "swap_horiz"
-                 label: "Swap"
-             }
--            Column {
-+            ColumnLayout {
-+                Layout.fillWidth: true
-                 spacing: 4
-                 StyledPopupValueRow {
-+                    Layout.fillWidth: true
-                     icon: "clock_loader_60"
-                     label: Translation.tr("Used:")
-                     value: root.formatKB(ResourceUsage.swapUsed)
-                 }
-                 StyledPopupValueRow {
-+                    Layout.fillWidth: true
-                     icon: "check_circle"
-                     label: Translation.tr("Free:")
-                     value: root.formatKB(ResourceUsage.swapFree)
-                 }
-                 StyledPopupValueRow {
-+                    Layout.fillWidth: true
-                     icon: "empty_dashboard"
-                     label: Translation.tr("Total:")
-                     value: root.formatKB(ResourceUsage.swapTotal)
-@@ -73,27 +117,32 @@
-             }
-         }
- 
--        Column {
--            anchors.top: parent.top
 +        ColumnLayout {
 +            Layout.alignment: Qt.AlignTop
 +            Layout.fillWidth: true
