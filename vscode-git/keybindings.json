@@ -1,0 +1,6 @@
+[
+    { "key": "ctrl+w", "command": "workbench.action.closeActiveEditor" },
+    { "key": "ctrl+shift+w", "command": "workbench.action.closeAllEditors" },
+    { "key": "escape", "command": "workbench.action.closeActiveEditor", "when": "textCompareEditorActive && !inDebugMode" },
+    { "key": "ctrl+shift+g", "command": "workbench.view.scm" }
+]
