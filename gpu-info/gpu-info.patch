@@ -1,0 +1,109 @@
+--- a/services/ResourceUsage.qml
++++ b/services/ResourceUsage.qml
+@@ -27,6 +27,16 @@
+     property string maxAvailableCpuString: "--"
+     property real cpuFreqGHz: 0 // average current clock across all cores
+     property real cpuTempC: 0 // CPU package temperature
++    property bool gpuAvailable: false
++    property string gpuName: ""
++    property real gpuUsage: 0 // 0..1
++    property real gpuMemUsedMiB: 0
++    property real gpuMemTotalMiB: 1
++    property real gpuMemUsedPercentage: gpuMemTotalMiB > 0 ? gpuMemUsedMiB / gpuMemTotalMiB : 0
++    property real gpuClockMHz: 0
++    property real gpuMemClockMHz: 0
++    property real gpuTempC: 0
++    property real gpuPowerW: 0
+ 
+     readonly property int historyLength: Config?.options.resources.historyLength ?? 60
+     property list<real> cpuUsageHistory: []
+@@ -120,6 +130,33 @@
+             }
+         }
+     }
++
++    Timer {
++        interval: Config.options?.resources?.updateInterval ?? 3000
++        running: true
++        repeat: true
++        triggeredOnStart: true
++        onTriggered: gpuInfoProc.running = true
++    }
++    Process {
++        id: gpuInfoProc
++        command: [Quickshell.env("HOME") + "/.config/hypr/custom/gpu-info.sh"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const f = text.trim().split("|");
++                root.gpuAvailable = f.length >= 8;
++                if (!root.gpuAvailable) return;
++                root.gpuName = f[0].replace(/NVIDIA |GeForce /g, "");
++                root.gpuUsage = (Number(f[1]) || 0) / 100;
++                root.gpuMemUsedMiB = Number(f[2]) || 0;
++                root.gpuMemTotalMiB = Number(f[3]) || 1;
++                root.gpuClockMHz = Number(f[4]) || 0;
++                root.gpuMemClockMHz = Number(f[5]) || 0;
++                root.gpuTempC = Number(f[6]) || 0;
++                root.gpuPowerW = Number(f[7]) || 0;
++            }
++        }
++    }
+ 
+     Process {
+         id: findCpuMaxFreqProc
+--- a/modules/ii/bar/Resources.qml
++++ b/modules/ii/bar/Resources.qml
+@@ -20,7 +20,15 @@
+         anchors.rightMargin: 4
+ 
+         Resource {
++            iconName: "developer_board"
++            percentage: ResourceUsage.gpuMemUsedPercentage
++            shown: ResourceUsage.gpuAvailable
++            warningThreshold: 90
++        }
++
++        Resource {
+             iconName: "memory"
++            Layout.leftMargin: ResourceUsage.gpuAvailable ? 6 : 0
+             percentage: ResourceUsage.memoryUsedPercentage
+             warningThreshold: Config.options.bar.resources.memoryWarningThreshold
+         }
+--- a/modules/ii/bar/ResourcesPopup.qml
++++ b/modules/ii/bar/ResourcesPopup.qml
+@@ -17,6 +17,35 @@
+         spacing: 12
+ 
+         Column {
++            visible: ResourceUsage.gpuAvailable
++            anchors.top: parent.top
++            spacing: 8
++
++            StyledPopupHeaderRow {
++                icon: "developer_board"
++                label: "GPU"
++            }
++            Column {
++                spacing: 4
++                StyledPopupValueRow {
++                    icon: "bolt"
++                    label: Translation.tr("Load:")
++                    value: `${Math.round(ResourceUsage.gpuUsage * 100)}%`
++                }
++                StyledPopupValueRow {
++                    icon: "clock_loader_60"
++                    label: Translation.tr("Used:")
++                    value: `${(ResourceUsage.gpuMemUsedMiB / 1024).toFixed(1)} GB`
++                }
++                StyledPopupValueRow {
++                    icon: "check_circle"
++                    label: Translation.tr("Free:")
++                    value: `${((ResourceUsage.gpuMemTotalMiB - ResourceUsage.gpuMemUsedMiB) / 1024).toFixed(1)} GB`
++                }
++            }
++        }
++
++        Column {
+             anchors.top: parent.top
+             spacing: 8
+ 
