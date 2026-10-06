@@ -1,0 +1,10 @@
+[Desktop Entry]
+Categories=Chat;Network;Office;
+Comment=Unofficial Microsoft Teams client for Linux using Electron. It uses the Web App and wraps it as a standalone application using Electron.
+Exec=/opt/teams-for-linux/teams-for-linux --ozone-platform=x11 %U
+Icon=teams-for-linux
+MimeType=x-scheme-handler/msteams;
+Name=Teams for Linux
+StartupWMClass=teams-for-linux
+Terminal=false
+Type=Application

@@ -1,0 +1,5 @@
+{
+	"appIcon": "/home/abdullah/Downloads/d247bc68e9d897c07767b5949b9aa28d.png",
+	"tray": { "enabled": true },
+	"window": { "minimized": true, "minimizeOnClose": true }
+}
