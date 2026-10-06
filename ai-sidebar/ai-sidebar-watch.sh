@@ -7,6 +7,13 @@ sock="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     case "$line" in
     openlayer\>\>quickshell:overview) "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"; continue ;;  # SUPER launcher/overview opened: close the panel
+    openwindow\>\>*)  # a window mapped while the panel is shown (e.g. Teams from the tray) lands on special:ai: close the panel and move it out
+        IFS=, read -r addr ws class _ <<<"${line#openwindow>>}"
+        [ "$ws" = special:ai ] && [ "$class" != ai-sidebar ] || continue
+        "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
+        dest=$(hyprctl monitors -j | jq -r '.[]|select(.focused).activeWorkspace.id')
+        hyprctl dispatch "hl.dsp.window.move({ workspace = \"$dest\", window = \"address:0x$addr\" })" >/dev/null
+        continue ;;
     activewindow\>\>*) ;;
     *) continue ;;
     esac

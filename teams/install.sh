@@ -8,6 +8,6 @@ cp "$d/teams-for-linux.desktop" ~/.config/autostart/
 f=~/.config/hypr/custom/execs.lua
 grep -q teams-for-linux "$f" || cat >> "$f" <<'LUA'
 
--- Teams for Linux: Hyprland doesn't process ~/.config/autostart, so launch it here (after the network is up)
-hl.on("hyprland.start", function () hl.exec_cmd("sh -c 'nm-online -q -t 120 && exec /opt/teams-for-linux/teams-for-linux --ozone-platform=x11'") end)
+-- Teams for Linux: Hyprland doesn't process ~/.config/autostart, so launch it here
+hl.on("hyprland.start", function () hl.exec_cmd("sh -c 'nm-online -q -t 120; for i in $(seq 60); do busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1 && break; sleep 1; done; exec /opt/teams-for-linux/teams-for-linux --ozone-platform=x11'") end)
 LUA

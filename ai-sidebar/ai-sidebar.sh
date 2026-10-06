@@ -17,5 +17,10 @@ for a in $stale; do hyprctl dispatch "hl.dsp.window.close({ window = \"address:$
 if jq -e '.[] | select(.class=="ai-sidebar" and .title=="'"$title"'")' <<<"$clients" >/dev/null; then
     hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")' >/dev/null
 else
-    nohup kitty --class ai-sidebar --title "$title" -d "$HOME" "$backend" >/dev/null 2>&1 9>&- &
+    # Resume the last conversation (survives restart/logout); start a new one if there is none
+    case $backend in
+        claude) cmd='claude --continue || exec claude' ;;
+        codex)  cmd='codex resume --last || exec codex' ;;
+    esac
+    nohup kitty --class ai-sidebar --title "$title" -d "$HOME" sh -c "$cmd" >/dev/null 2>&1 9>&- &
 fi
