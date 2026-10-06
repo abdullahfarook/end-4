@@ -26,5 +26,7 @@ else
     hyprctl dispatch "hl.dsp.window.resize({ x = $((mw * 4 / 10)), y = $((mh - 80)), relative = false, window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.move({ x = 12, y = 60, relative = false, window = \"$w\" })" >/dev/null
     sleep 0.5
-    hyprctl dispatch 'hl.dsp.workspace.toggle_special("vgit")' >/dev/null
+    # The title rule may already have revealed the panel: only toggle if it is not shown yet (else it would hide again)
+    hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:vgit")' >/dev/null \
+        || hyprctl dispatch 'hl.dsp.workspace.toggle_special("vgit")' >/dev/null
 fi
