@@ -1,0 +1,2 @@
+# Managed by ~/repos/end-4/swap-oom. Kill at <5% free RAM and <10% free swap.
+EARLYOOM_ARGS="-m 5 -s 10 -n --avoid '(^|/)(Hyprland|hyprland|qs|quickshell|systemd|sddm|dbus-daemon|pipewire|wireplumber)$' --prefer '(^|/)(chrome|chromium|firefox|brave|electron|code|Teams)$'"
