@@ -203,7 +203,7 @@
             ],
             "showAppIcons": true,
             "showNumberDelay": 300,
-            "shown": 10,
+            "shown": 5,
             "useNerdFont": false
         }
     },

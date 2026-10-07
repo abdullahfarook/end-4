@@ -1,12 +1,20 @@
 -- >>> monitor-workspaces >>>
--- Per-monitor workspaces: the bar shows 8 dots (a "group"). Group 0 (1-8) lives on eDP-1, group 1 (9-16) on HDMI-A-2,
--- so each bar only shows its own monitor's workspaces/apps. If a monitor is unplugged Hyprland moves its workspaces to
--- the remaining one, where they appear after its own (scroll past the last dot); replugging sends them back.
-workspaceGroupSize = 8  -- must match config bar.workspaces.shown
-local ws_monitors = { { "eDP-1", 0 }, { "HDMI-A-2", 1 } }
-for _, m in ipairs(ws_monitors) do
+-- Per-monitor workspaces: the bar's workspace count (Settings -> Bar -> Workspaces -> Shown, bar.workspaces.shown in
+-- config.json) is PER MONITOR. Monitor 1 (eDP-1) owns the first group, monitor 2 (HDMI-A-2) the next, so each bar only
+-- shows its own monitor's workspaces/apps (shown = 5: eDP-1 1-5, HDMI-A-2 6-10). Alone, a monitor just has its group;
+-- if one is unplugged Hyprland moves its workspaces to the remaining one, after its own (scroll past the last dot).
+-- The count is read when the Lua config loads (run `hyprctl reload` after changing it).
+local size = 5
+local f = io.open(os.getenv("HOME") .. "/.config/illogical-impulse/config.json", "r")
+if f then
+    local n = f:read("*a"):match('"workspaces"%s*:%s*{.-"shown"%s*:%s*(%d+)')
+    f:close()
+    if n then size = tonumber(n) end
+end
+workspaceGroupSize = math.max(1, size)
+for k, name in ipairs({ "eDP-1", "HDMI-A-2" }) do
     for i = 1, workspaceGroupSize do
-        hl.workspace_rule({ workspace = tostring(m[2] * workspaceGroupSize + i), monitor = m[1], default = (i == 1) })
+        hl.workspace_rule({ workspace = tostring((k - 1) * workspaceGroupSize + i), monitor = name, default = (i == 1) })
     end
 end
 -- <<< monitor-workspaces <<<
