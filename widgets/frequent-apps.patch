@@ -11,7 +11,7 @@ diff -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
      property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
 diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/SearchWidget.qml
 --- a/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:28.452326167 +0500
-+++ files/modules/ii/overview/SearchWidget.qml	2026-10-07 19:15:18.835566515 +0500
++++ files/modules/ii/overview/SearchWidget.qml	2026-10-07 19:18:52.222961439 +0500
 @@ -5,6 +5,7 @@
  import QtQuick
  import QtQuick.Layouts
@@ -56,7 +56,7 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
 +                spacing: 2
 +                property bool editMode: false
 +                property var pinnedEntries: Config.options.launcher.pinnedApps
-+                    .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? DesktopEntries.heuristicLookup(id))
++                    .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? LauncherApps.entryForClass(id))
 +                    .filter(Boolean)
 +
 +                StyledText {

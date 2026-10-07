@@ -176,7 +176,7 @@ Item { // Wrapper
                 spacing: 2
                 property bool editMode: false
                 property var pinnedEntries: Config.options.launcher.pinnedApps
-                    .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? DesktopEntries.heuristicLookup(id))
+                    .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? LauncherApps.entryForClass(id))
                     .filter(Boolean)
 
                 StyledText {

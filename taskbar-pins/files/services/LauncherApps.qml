@@ -3,6 +3,7 @@ pragma Singleton
 import qs.modules.common
 import QtQuick
 import Quickshell
+import qs.services
 
 Singleton {
     id: root
@@ -17,6 +18,15 @@ Singleton {
         } else {
             Config.options.launcher.pinnedApps = Config.options.launcher.pinnedApps.concat([appId])
         }
+    }
+
+    // Window class -> desktop entry (falls back to matching the Exec binary name)
+    function entryForClass(cls) {
+        if (!cls) return null;
+        const e = DesktopEntries.heuristicLookup(cls);
+        if (e) return e;
+        const c = cls.toLowerCase();
+        return DesktopEntries.applications.values.find(a => (a.execString ?? "").toLowerCase().split(/\s+/)[0].split("/").pop() === c) ?? null;
     }
 
     function pinIndex(appId) {

@@ -294,7 +294,7 @@ Item {
 
                         Rectangle { // Pin button
                             id: pinButton
-                            property string appId: DesktopEntries.heuristicLookup(window.windowData?.class ?? "")?.id ?? window.windowData?.class ?? ""
+                            property string appId: LauncherApps.entryForClass(window.windowData?.class ?? "")?.id ?? window.windowData?.class ?? ""
                             property bool pinned: LauncherApps.pinIndex(appId) !== -1
                             visible: dragArea.containsMouse || pinButtonArea.containsMouse || pinned
                             anchors { top: parent.top; right: parent.right; margins: 4 }
