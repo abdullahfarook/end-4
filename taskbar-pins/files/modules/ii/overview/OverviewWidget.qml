@@ -296,17 +296,18 @@ Item {
                             id: pinButton
                             property string appId: LauncherApps.entryForClass(window.windowData?.class ?? "")?.id ?? window.windowData?.class ?? ""
                             property bool pinned: LauncherApps.pinIndex(appId) !== -1
-                            visible: dragArea.containsMouse || pinButtonArea.containsMouse || pinned
+                            visible: dragArea.containsMouse || pinButtonArea.containsMouse
                             anchors { top: parent.top; right: parent.right; margins: 4 }
-                            width: 24; height: 24; radius: 12
-                            color: pinned ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
-                            opacity: pinButtonArea.containsMouse ? 1 : 0.85
+                            width: 18; height: 18; radius: 9
+                            color: pinButtonArea.containsMouse ? Appearance.colors.colSurfaceContainerHighest : Appearance.colors.colSurfaceContainerHigh
+                            border.width: 1
+                            border.color: Appearance.colors.colOutlineVariant
                             MaterialSymbol {
                                 anchors.centerIn: parent
                                 text: "push_pin"
                                 fill: pinButton.pinned ? 1 : 0
-                                iconSize: 16
-                                color: pinButton.pinned ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+                                iconSize: 12
+                                color: pinButton.pinned ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                             }
                             MouseArea {
                                 id: pinButtonArea
