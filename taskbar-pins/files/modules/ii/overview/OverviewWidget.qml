@@ -292,29 +292,33 @@ Item {
                             }
                         }
 
-                        Rectangle { // Pin button
+                        RippleButton { // Pin button
                             id: pinButton
                             property string appId: LauncherApps.entryForClass(window.windowData?.class ?? "")?.id ?? window.windowData?.class ?? ""
                             property bool pinned: LauncherApps.pinIndex(appId) !== -1
-                            visible: dragArea.containsMouse || pinButtonArea.containsMouse
+                            visible: dragArea.containsMouse || hovered
                             anchors { top: parent.top; right: parent.right; margins: 4 }
-                            width: 18; height: 18; radius: 9
-                            color: pinButtonArea.containsMouse ? Appearance.colors.colSurfaceContainerHighest : Appearance.colors.colSurfaceContainerHigh
-                            border.width: 1
-                            border.color: Appearance.colors.colOutlineVariant
-                            MaterialSymbol {
-                                anchors.centerIn: parent
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            buttonRadius: Appearance.rounding.full
+                            toggled: pinned
+                            colBackground: Appearance.colors.colSurfaceContainerHigh
+                            colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                            colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                            colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                            colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                            colRippleToggled: Appearance.colors.colSecondaryContainerActive
+                            onClicked: pinned ? LauncherApps.unpin(appId) : LauncherApps.pin(appId)
+                            contentItem: MaterialSymbol {
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                                 text: "push_pin"
                                 fill: pinButton.pinned ? 1 : 0
-                                iconSize: 12
-                                color: pinButton.pinned ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                                iconSize: 14
+                                color: pinButton.pinned ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
                             }
-                            MouseArea {
-                                id: pinButtonArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: pinButton.pinned ? LauncherApps.unpin(pinButton.appId) : LauncherApps.pin(pinButton.appId)
+                            StyledToolTip {
+                                text: pinButton.pinned ? Translation.tr("Unpin") : Translation.tr("Pin")
                             }
                         }
 
