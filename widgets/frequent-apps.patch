@@ -1,6 +1,6 @@
-diff --color -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
---- a/modules/common/Directories.qml	2026-10-04 17:36:07.350161838 +0500
-+++ b/modules/common/Directories.qml	2026-10-04 17:36:07.341161768 +0500
+diff -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
+--- a/modules/common/Directories.qml	2026-10-04 17:36:28.450326152 +0500
++++ files/modules/common/Directories.qml	2026-10-04 17:36:07.341161768 +0500
 @@ -34,6 +34,7 @@
      property string shellConfigName: "config.json"
      property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
@@ -9,9 +9,9 @@ diff --color -ruN a/modules/common/Directories.qml files/modules/common/Director
  	property string notesPath: FileUtils.trimFileProtocol(`${Directories.state}/user/notes.txt`)
  	property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
      property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
-diff --color -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/SearchWidget.qml
---- a/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:07.348161822 +0500
-+++ b/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:07.338161744 +0500
+diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/SearchWidget.qml
+--- a/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:28.452326167 +0500
++++ files/modules/ii/overview/SearchWidget.qml	2026-10-07 18:51:59.515920861 +0500
 @@ -5,6 +5,7 @@
  import QtQuick
  import QtQuick.Layouts
@@ -29,46 +29,129 @@ diff --color -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overvi
      implicitWidth: searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2
      implicitHeight: searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2
  
-@@ -150,6 +153,36 @@
+@@ -150,6 +153,119 @@
                  }
              }
  
-+            RowLayout { // Frequent apps, icons only
-+                visible: root.showFrequentApps
++            Item { // Pinned apps, icons only. Drop a window from the overview here to pin it
++                visible: !root.showResults
 +                Layout.alignment: Qt.AlignHCenter
 +                Layout.bottomMargin: 6
++                implicitWidth: pinnedRow.implicitWidth
++                implicitHeight: pinnedRow.implicitHeight
++
++                DropArea {
++                    anchors { fill: parent; margins: -8 }
++                    onDropped: drop => {
++                        const cls = drop.source?.windowData?.class;
++                        if (!cls) return;
++                        const entry = DesktopEntries.heuristicLookup(cls);
++                        LauncherApps.pin(entry ? entry.id : cls);
++                    }
++                }
++
++            RowLayout {
++                id: pinnedRow
++                anchors.fill: parent
 +                spacing: 2
++                property bool editMode: false
++                property var pinnedEntries: Config.options.launcher.pinnedApps
++                    .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? DesktopEntries.heuristicLookup(id))
++                    .filter(Boolean)
++
++                StyledText {
++                    visible: pinnedRow.pinnedEntries.length === 0
++                    text: Translation.tr("Drag a window here to pin its app")
++                    color: Appearance.colors.colSubtext
++                }
 +
 +                Repeater {
-+                    model: root.frequentApps
++                    model: pinnedRow.pinnedEntries
 +                    delegate: RippleButton {
-+                        id: frequentAppButton
++                        id: pinnedAppButton
 +                        required property var modelData
++                        required property int index
++                        property real dragDx: 0
 +                        implicitWidth: 36
 +                        implicitHeight: 36
 +                        buttonRadius: Appearance.rounding.full
++                        z: dragArea.pressed ? 10 : 0
++                        transform: Translate { x: pinnedAppButton.dragDx }
 +                        onClicked: {
++                            if (pinnedRow.editMode) return;
 +                            LauncherSearch.appResult(modelData).execute();
 +                            GlobalStates.overviewOpen = false;
 +                        }
 +                        contentItem: IconImage {
 +                            anchors.centerIn: parent
-+                            source: Quickshell.iconPath(AppSearch.guessIcon(frequentAppButton.modelData.icon), "application-x-executable")
++                            source: Quickshell.iconPath(AppSearch.guessIcon(pinnedAppButton.modelData.icon), "application-x-executable")
 +                            implicitSize: 24
 +                        }
 +                        StyledToolTip {
-+                            text: frequentAppButton.modelData.name
++                            text: pinnedAppButton.modelData.name
++                        }
++                        MouseArea {
++                            id: dragArea
++                            anchors.fill: parent
++                            visible: pinnedRow.editMode
++                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
++                            property real startX
++                            onPressed: mouse => startX = mapToItem(pinnedRow, mouse.x, 0).x
++                            onPositionChanged: mouse => {
++                                if (pressed) pinnedAppButton.dragDx = mapToItem(pinnedRow, mouse.x, 0).x - startX;
++                            }
++                            onReleased: {
++                                const step = Math.round(pinnedAppButton.dragDx / (pinnedAppButton.width + pinnedRow.spacing));
++                                pinnedAppButton.dragDx = 0;
++                                LauncherApps.movePin(pinnedAppButton.index, pinnedAppButton.index + step);
++                            }
++                        }
++                        Rectangle { // Remove badge
++                            visible: pinnedRow.editMode
++                            z: 20
++                            width: 16; height: 16; radius: 8
++                            color: Appearance.colors.colError
++                            anchors { top: parent.top; right: parent.right; topMargin: -2; rightMargin: -2 }
++                            MaterialSymbol {
++                                anchors.centerIn: parent
++                                text: "close"
++                                iconSize: 12
++                                color: Appearance.colors.colOnError
++                            }
++                            MouseArea {
++                                anchors.fill: parent
++                                cursorShape: Qt.PointingHandCursor
++                                onClicked: LauncherApps.unpin(pinnedAppButton.modelData.id)
++                            }
 +                        }
 +                    }
 +                }
++
++                RippleButton { // Edit / done
++                    implicitWidth: 36
++                    implicitHeight: 36
++                    buttonRadius: Appearance.rounding.full
++                    onClicked: pinnedRow.editMode = !pinnedRow.editMode
++                    contentItem: MaterialSymbol {
++                        anchors.centerIn: parent
++                        horizontalAlignment: Text.AlignHCenter
++                        text: pinnedRow.editMode ? "check" : "edit"
++                        iconSize: 20
++                        color: Appearance.colors.colOnLayer1
++                    }
++                    StyledToolTip {
++                        text: pinnedRow.editMode ? Translation.tr("Done") : Translation.tr("Edit pinned apps")
++                    }
++                }
++            }
 +            }
 +
              Rectangle {
                  // Separator
                  visible: root.showResults
-diff --color -ruN a/services/AppSearch.qml files/services/AppSearch.qml
---- a/services/AppSearch.qml	2026-10-04 17:36:07.346161807 +0500
-+++ b/services/AppSearch.qml	2026-10-04 17:36:07.336161729 +0500
+diff -ruN a/services/AppSearch.qml files/services/AppSearch.qml
+--- a/services/AppSearch.qml	2026-10-04 17:36:28.453326175 +0500
++++ files/services/AppSearch.qml	2026-10-04 17:36:07.336161729 +0500
 @@ -3,6 +3,8 @@
  import qs.modules.common
  import qs.modules.common.functions
@@ -152,9 +235,9 @@ diff --color -ruN a/services/AppSearch.qml files/services/AppSearch.qml
      }
  
      function iconExists(iconName) {
-diff --color -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
---- a/services/LauncherSearch.qml	2026-10-04 17:36:07.346161807 +0500
-+++ b/services/LauncherSearch.qml	2026-10-04 17:36:07.336161729 +0500
+diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
+--- a/services/LauncherSearch.qml	2026-10-04 17:36:28.454326183 +0500
++++ files/services/LauncherSearch.qml	2026-10-04 17:36:07.336161729 +0500
 @@ -164,11 +164,51 @@
          }
      }
