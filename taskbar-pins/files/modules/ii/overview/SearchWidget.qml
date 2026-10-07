@@ -196,6 +196,7 @@ Item { // Wrapper
                         implicitHeight: 36
                         buttonRadius: Appearance.rounding.full
                         z: dragArea.pressed ? 10 : 0
+                        colBackground: pinnedRow.editMode ? Appearance.colors.colLayer2 : "transparent"
                         transform: Translate { x: pinnedAppButton.dragDx }
                         onClicked: {
                             if (pinnedRow.editMode) return;
@@ -226,22 +227,23 @@ Item { // Wrapper
                                 LauncherApps.movePin(pinnedAppButton.index, pinnedAppButton.index + step);
                             }
                         }
-                        Rectangle { // Remove badge
+                        RippleButton { // Remove badge
                             visible: pinnedRow.editMode
                             z: 20
-                            width: 16; height: 16; radius: 8
-                            color: Appearance.colors.colError
-                            anchors { top: parent.top; right: parent.right; topMargin: -2; rightMargin: -2 }
-                            MaterialSymbol {
-                                anchors.centerIn: parent
+                            implicitWidth: 18
+                            implicitHeight: 18
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            colBackgroundHover: Appearance.colors.colErrorContainer
+                            colRipple: Appearance.colors.colErrorContainerActive
+                            anchors { top: parent.top; right: parent.right; topMargin: -3; rightMargin: -3 }
+                            onClicked: LauncherApps.unpin(pinnedAppButton.modelData.id)
+                            contentItem: MaterialSymbol {
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
                                 text: "close"
                                 iconSize: 12
-                                color: Appearance.colors.colOnError
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: LauncherApps.unpin(pinnedAppButton.modelData.id)
+                                color: Appearance.colors.colOnSurfaceVariant
                             }
                         }
                     }
@@ -250,14 +252,17 @@ Item { // Wrapper
                 RippleButton { // Edit / done
                     implicitWidth: 36
                     implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
+                    buttonRadius: Appearance.rounding.small
+                    toggled: pinnedRow.editMode
+                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                     onClicked: pinnedRow.editMode = !pinnedRow.editMode
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
                         horizontalAlignment: Text.AlignHCenter
                         text: pinnedRow.editMode ? "check" : "edit"
                         iconSize: 20
-                        color: Appearance.colors.colOnLayer1
+                        color: pinnedRow.editMode ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
                     }
                     StyledToolTip {
                         text: pinnedRow.editMode ? Translation.tr("Done") : Translation.tr("Edit pinned apps")

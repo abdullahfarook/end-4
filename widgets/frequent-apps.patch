@@ -11,7 +11,7 @@ diff -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
      property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
 diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/SearchWidget.qml
 --- a/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:28.452326167 +0500
-+++ files/modules/ii/overview/SearchWidget.qml	2026-10-07 18:51:59.515920861 +0500
++++ files/modules/ii/overview/SearchWidget.qml	2026-10-07 19:15:18.835566515 +0500
 @@ -5,6 +5,7 @@
  import QtQuick
  import QtQuick.Layouts
@@ -29,7 +29,7 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
      implicitWidth: searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2
      implicitHeight: searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2
  
-@@ -150,6 +153,119 @@
+@@ -150,6 +153,124 @@
                  }
              }
  
@@ -76,6 +76,7 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
 +                        implicitHeight: 36
 +                        buttonRadius: Appearance.rounding.full
 +                        z: dragArea.pressed ? 10 : 0
++                        colBackground: pinnedRow.editMode ? Appearance.colors.colLayer2 : "transparent"
 +                        transform: Translate { x: pinnedAppButton.dragDx }
 +                        onClicked: {
 +                            if (pinnedRow.editMode) return;
@@ -106,22 +107,23 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
 +                                LauncherApps.movePin(pinnedAppButton.index, pinnedAppButton.index + step);
 +                            }
 +                        }
-+                        Rectangle { // Remove badge
++                        RippleButton { // Remove badge
 +                            visible: pinnedRow.editMode
 +                            z: 20
-+                            width: 16; height: 16; radius: 8
-+                            color: Appearance.colors.colError
-+                            anchors { top: parent.top; right: parent.right; topMargin: -2; rightMargin: -2 }
-+                            MaterialSymbol {
-+                                anchors.centerIn: parent
++                            implicitWidth: 18
++                            implicitHeight: 18
++                            buttonRadius: Appearance.rounding.full
++                            colBackground: Appearance.colors.colSurfaceContainerHighest
++                            colBackgroundHover: Appearance.colors.colErrorContainer
++                            colRipple: Appearance.colors.colErrorContainerActive
++                            anchors { top: parent.top; right: parent.right; topMargin: -3; rightMargin: -3 }
++                            onClicked: LauncherApps.unpin(pinnedAppButton.modelData.id)
++                            contentItem: MaterialSymbol {
++                                horizontalAlignment: Text.AlignHCenter
++                                verticalAlignment: Text.AlignVCenter
 +                                text: "close"
 +                                iconSize: 12
-+                                color: Appearance.colors.colOnError
-+                            }
-+                            MouseArea {
-+                                anchors.fill: parent
-+                                cursorShape: Qt.PointingHandCursor
-+                                onClicked: LauncherApps.unpin(pinnedAppButton.modelData.id)
++                                color: Appearance.colors.colOnSurfaceVariant
 +                            }
 +                        }
 +                    }
@@ -130,14 +132,17 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
 +                RippleButton { // Edit / done
 +                    implicitWidth: 36
 +                    implicitHeight: 36
-+                    buttonRadius: Appearance.rounding.full
++                    buttonRadius: Appearance.rounding.small
++                    toggled: pinnedRow.editMode
++                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
++                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
 +                    onClicked: pinnedRow.editMode = !pinnedRow.editMode
 +                    contentItem: MaterialSymbol {
 +                        anchors.centerIn: parent
 +                        horizontalAlignment: Text.AlignHCenter
 +                        text: pinnedRow.editMode ? "check" : "edit"
 +                        iconSize: 20
-+                        color: Appearance.colors.colOnLayer1
++                        color: pinnedRow.editMode ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
 +                    }
 +                    StyledToolTip {
 +                        text: pinnedRow.editMode ? Translation.tr("Done") : Translation.tr("Edit pinned apps")
