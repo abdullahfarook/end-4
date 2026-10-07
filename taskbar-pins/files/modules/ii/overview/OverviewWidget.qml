@@ -53,10 +53,18 @@ Item {
     property Component windowComponent: OverviewWindow {}
     property list<OverviewWindow> windowWidgets: []
     
+    // Rows follow the physical monitor layout: group 1 is eDP-1, group 2 is HDMI-A-2 (see monitor-workspaces);
+    // if eDP-1 sits lower on screen than HDMI-A-2, its row goes second (bottom), else first.
+    readonly property bool rowsFlipped: {
+        const a = HyprlandData.monitors.find(m => m.name === "eDP-1")
+        const b = HyprlandData.monitors.find(m => m.name === "HDMI-A-2")
+        if (a && b && a.y !== b.y) return a.y > b.y
+        return Config.options.overview.orderBottomUp
+    }
     function getWsRow(ws) {
         // 1-indexed workspace, 0-indexed row
         var normalRow = Math.floor((ws - 1) / Config.options.overview.columns) % Config.options.overview.rows;
-        return (Config.options.overview.orderBottomUp ? Config.options.overview.rows - normalRow - 1 : normalRow);
+        return (root.rowsFlipped ? Config.options.overview.rows - normalRow - 1 : normalRow);
     }
     function getWsColumn(ws) {
         // 1-indexed workspace, 0-indexed column
@@ -65,7 +73,7 @@ Item {
     }
     function getWsInCell(ri, ci) {
         // 1-indexed workspace, 0-indexed row and column index
-        return (Config.options.overview.orderBottomUp ? Config.options.overview.rows - ri - 1 : ri) * Config.options.overview.columns + (Config.options.overview.orderRightLeft ? Config.options.overview.columns - ci - 1 : ci) + 1
+        return (root.rowsFlipped ? Config.options.overview.rows - ri - 1 : ri) * Config.options.overview.columns + (Config.options.overview.orderRightLeft ? Config.options.overview.columns - ci - 1 : ci) + 1
     }
 
     StyledRectangularShadow {
