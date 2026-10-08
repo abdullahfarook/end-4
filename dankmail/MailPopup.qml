@@ -177,22 +177,32 @@ LazyLoader {
                         delegate: RippleButton {
                             id: chip
                             required property var modelData
-                            Layout.preferredWidth: chip.modelData.unread > 0 ? 72 : 44
+                            // The selected account chip grows to show the full address
+                            readonly property bool expanded: toggled && modelData.id !== ""
+                            Layout.preferredWidth: chipRow.implicitWidth + 18
+                            Behavior on Layout.preferredWidth { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                             implicitHeight: 32
                             buttonRadius: 16
                             toggled: root.store.accountFilter === modelData.id
                             onClicked: root.store.setAccount(modelData.id)
                             readonly property color fg: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
                             RowLayout {
+                                id: chipRow
                                 anchors.centerIn: parent
                                 spacing: 5
-                                MaterialSymbol { visible: chip.modelData.logo === ""; text: chip.modelData.icon; iconSize: 20; color: chip.fg }
+                                MaterialSymbol { visible: chip.modelData.logo === ""; text: chip.modelData.icon ?? ""; iconSize: 20; color: chip.fg }
                                 Image {
                                     visible: chip.modelData.logo !== ""
                                     source: visible ? Quickshell.shellPath("assets/icons/mail/" + chip.modelData.logo + ".svg") : ""
                                     sourceSize: Qt.size(40, 40)
                                     Layout.preferredWidth: 20; Layout.preferredHeight: 20
                                     fillMode: Image.PreserveAspectFit
+                                }
+                                StyledText {
+                                    visible: chip.expanded
+                                    text: chip.modelData.email
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: chip.fg
                                 }
                                 Rectangle {
                                     visible: chip.modelData.unread > 0
