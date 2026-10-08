@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Hyprland
 import qs
 import qs.modules.common
 import qs.modules.common.functions
@@ -23,6 +24,12 @@ RippleButton {
     onClicked: {
         openedByClick = !GlobalStates.overviewOpen
         GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+    }
+    Connections {  // clicking another window / switching workspace drops the highlight too
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "activewindowv2" || event.name === "workspacev2") root.openedByClick = false
+        }
     }
     Connections {
         target: GlobalStates

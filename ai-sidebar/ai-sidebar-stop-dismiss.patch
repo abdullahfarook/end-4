@@ -1,0 +1,37 @@
+--- a/modules/ii/bar/LeftSidebarButton.qml	2026-10-08 13:58:08.209917960 +0500
++++ b/modules/ii/bar/LeftSidebarButton.qml	2026-10-08 13:58:08.210966249 +0500
+@@ -2,6 +2,7 @@
+ import QtQuick.Layouts
+ import Quickshell
+ import Quickshell.Hyprland
++import Quickshell.Wayland
+ import qs
+ import qs.services
+ import qs.modules.common
+@@ -53,6 +54,26 @@
+             windows: [stopMenu]
+             onCleared: stopMenu.visible = false
+         }
++        PanelWindow {  // full-screen click catcher: any click outside the menu closes it
++            visible: stopMenu.visible
++            color: "transparent"
++            exclusionMode: ExclusionMode.Ignore
++            WlrLayershell.layer: WlrLayer.Top
++            WlrLayershell.namespace: "quickshell:stop-menu-dismiss"
++            anchors { top: true; bottom: true; left: true; right: true }
++            MouseArea {
++                anchors.fill: parent
++                acceptedButtons: Qt.AllButtons
++                onPressed: stopMenu.visible = false
++            }
++        }
++        Connections {  // also close when focus moves elsewhere (clicking another window / workspace)
++            target: Hyprland
++            enabled: stopMenu.visible
++            function onRawEvent(event) {
++                if (["activewindowv2", "workspacev2", "focusedmonv2"].includes(event.name)) stopMenu.visible = false
++            }
++        }
+         StyledRectangularShadow { target: menuBg }
+         Rectangle {
+             id: menuBg

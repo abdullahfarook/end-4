@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Hyprland
+import Quickshell.Wayland
 import Quickshell
 import qs
 import qs.modules.common
@@ -37,6 +38,26 @@ RippleButton {
             active: stopMenu.visible
             windows: [stopMenu]
             onCleared: stopMenu.visible = false
+        }
+        PanelWindow {  // full-screen click catcher: any click outside the menu closes it
+            visible: stopMenu.visible
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.namespace: "quickshell:stop-menu-dismiss"
+            anchors { top: true; bottom: true; left: true; right: true }
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                onPressed: stopMenu.visible = false
+            }
+        }
+        Connections {  // also close when focus moves elsewhere (clicking another window / workspace)
+            target: Hyprland
+            enabled: stopMenu.visible
+            function onRawEvent(event) {
+                if (["activewindowv2", "workspacev2", "focusedmonv2"].includes(event.name)) stopMenu.visible = false
+            }
         }
         StyledRectangularShadow { target: menuBg }
         Rectangle {

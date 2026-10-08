@@ -16,6 +16,8 @@ else
 fi
 if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar-stop.patch" >/dev/null 2>&1; then echo "Stop-menu patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop.patch" && echo "Stop-menu patch applied."; fi
+if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar-stop-dismiss.patch" >/dev/null 2>&1; then echo "Stop-menu dismiss patch already applied."
+else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop-dismiss.patch" && echo "Stop-menu dismiss patch applied."; fi
 for f in ai-sidebar-stop.sh ai-sidebar.sh ai-sidebar-watch.sh ai-sidebar-clickaway.sh ai-sidebar-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 python3 - "$KEYBINDS" "$REPO/ai-sidebar-keybinds.lua" <<'PY'
 import re, sys
