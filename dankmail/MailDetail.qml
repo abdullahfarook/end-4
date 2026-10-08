@@ -98,6 +98,25 @@ Rectangle {
             Layout.fillHeight: true
             clip: true
             spacing: 0
+            reuseItems: true
+            maximumFlickVelocity: 6000
+            property real wheelTarget: 0
+            Behavior on contentY { enabled: wheelArea.animating; NumberAnimation { duration: 140; easing.type: Easing.OutCubic; onRunningChanged: if (!running) wheelArea.animating = false } }
+            MouseArea {  // bigger, smoothed wheel steps (Qt's default ~20px per notch feels glacial on long mails)
+                id: wheelArea
+                property bool animating: false
+                anchors.fill: parent
+                acceptedButtons: Qt.NoButton
+                onWheel: w => {
+                    const maxY = Math.max(0, messages.contentHeight - messages.height);
+                    const base = animating ? messages.wheelTarget : messages.contentY;
+                    const step = Math.abs(w.angleDelta.y) >= 120 ? 1.6 : 0.5;  // mouse notch vs touchpad
+                    messages.wheelTarget = Math.max(0, Math.min(base - w.angleDelta.y * step, maxY));
+                    animating = true;
+                    messages.contentY = messages.wheelTarget;
+                    w.accepted = true;
+                }
+            }
             boundsBehavior: Flickable.StopAtBounds
             model: detail.thread ? detail.thread.messages : []
             ScrollBar.vertical: StyledScrollBar {}
@@ -114,13 +133,39 @@ Rectangle {
                         asynchronous: true
                         source: slot.seg.url || ""
                         fillMode: Image.PreserveAspectFit
+                        sourceSize.width: Math.ceil(slot.maxW * 2)  // cap decode size: huge originals made scrolling janky
+                        cache: true
+                        smooth: false
+                        mipmap: false
+                        opacity: status === Image.Ready ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 180 } }
                         width: Math.min(slot.seg.w > 0 ? slot.seg.w : implicitWidth, slot.maxW)
                         height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : 0
-                        visible: status === Image.Ready
+                        visible: opacity > 0
                     }
-                    MaterialLoadingIndicator {
-                        visible: img.status === Image.Loading
-                        anchors.centerIn: parent; implicitWidth: 32; implicitHeight: 32
+                    Rectangle {  // skeleton: soft rounded block with a slow shimmer while the image loads
+                        id: skel
+                        visible: img.status === Image.Loading || img.status === Image.Null
+                        width: Math.min(slot.seg.w > 0 ? slot.seg.w : slot.maxW, slot.maxW)
+                        height: parent.height - 6
+                        y: 3
+                        radius: 12
+                        color: Qt.rgba(1, 1, 1, 0.05)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.06)
+                        clip: true
+                        Rectangle {
+                            id: shine
+                            width: parent.width * 0.5; height: parent.height
+                            rotation: 0
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0; color: "transparent" }
+                                GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.07) }
+                                GradientStop { position: 1; color: "transparent" }
+                            }
+                            NumberAnimation on x { running: skel.visible; from: -shine.width; to: skel.width; duration: 1800; easing.type: Easing.InOutSine; loops: Animation.Infinite }
+                        }
                     }
                 }
             }
@@ -131,6 +176,7 @@ Rectangle {
                     text: seg.html
                     textFormat: Text.RichText
                     wrapMode: Text.Wrap
+                    renderType: Text.NativeRendering  // cheaper to scroll than outline-tessellated glyphs
                     font.family: Appearance.font.family.main
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnLayer1
