@@ -260,6 +260,24 @@ LazyLoader {
                         model: root.store.threads
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
+                        maximumFlickVelocity: 6000
+                        property real wheelTarget: 0
+                        Behavior on contentY { enabled: wheelArea.animating; NumberAnimation { duration: 140; easing.type: Easing.OutCubic; onRunningChanged: if (!running) wheelArea.animating = false } }
+                        MouseArea {  // same bigger, smoothed wheel steps as the mail detail panel
+                            id: wheelArea
+                            property bool animating: false
+                            anchors.fill: parent
+                            acceptedButtons: Qt.NoButton
+                            onWheel: w => {
+                                const maxY = Math.max(0, list.contentHeight - list.height);
+                                const base = animating ? list.wheelTarget : list.contentY;
+                                const step = Math.abs(w.angleDelta.y) >= 120 ? 1.6 : 0.5;  // mouse notch vs touchpad
+                                list.wheelTarget = Math.max(0, Math.min(base - w.angleDelta.y * step, maxY));
+                                animating = true;
+                                list.contentY = list.wheelTarget;
+                                w.accepted = true;
+                            }
+                        }
                         delegate: MailRow { width: list.width; store: root.store }
                         function checkEnd() { if (contentHeight > 0 && contentHeight - contentY - height < 160) root.store.loadMore(); }
                         onContentYChanged: checkEnd()
