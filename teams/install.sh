@@ -9,8 +9,11 @@ f=~/.config/hypr/custom/execs.lua
 grep -q teams-for-linux "$f" || cat >> "$f" <<'LUA'
 
 -- Teams for Linux: Hyprland doesn't process ~/.config/autostart, so launch it here
-hl.on("hyprland.start", function () hl.exec_cmd("sh -c 'nm-online -q -t 120; for i in $(seq 60); do busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1 && break; sleep 1; done; exec /opt/teams-for-linux/teams-for-linux --ozone-platform=x11'") end)
+hl.on("hyprland.start", function () hl.exec_cmd("sh -c 'nm-online -q -t 120; for i in $(seq 60); do busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1 && break; sleep 1; done; /opt/teams-for-linux/teams-for-linux --ozone-platform=x11 & exec ~/.config/hypr/custom/teams-panel.sh dock'") end)
 LUA
+
+# Existing installs: switch the autostart line to "start, then dock the window on the hidden special:teams workspace"
+sed -i "s|exec /opt/teams-for-linux/teams-for-linux --ozone-platform=x11'|/opt/teams-for-linux/teams-for-linux --ozone-platform=x11 \\& exec ~/.config/hypr/custom/teams-panel.sh dock'|" "$f"
 
 # Tray click workaround: quickshell tray click launches a 2nd instance, which shows the hidden window
 q=~/.config/quickshell/ii

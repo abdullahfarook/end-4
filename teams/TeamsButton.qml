@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Services.SystemTray
 import qs
 import qs.services
@@ -9,7 +10,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 // Bar button for the Teams panel (see teams-panel.sh). Left click toggles the panel; right click shows the same menu as
-// Teams' tray icon (Open, Join Meeting, Settings...). The badge is the unread count Teams puts in its window title: "(3) Chat | ...".
+// Teams' tray icon (Open, Join Meeting, Settings...). The dot shows when Teams has unread messages (it puts the count in its window title: "(3) Chat | ...").
 RippleButton {
     id: root
     property real buttonPadding: 5
@@ -30,7 +31,11 @@ RippleButton {
         return n;
     }
 
-    onClicked: Quickshell.execDetached(["bash", "-c", "$HOME/.config/hypr/custom/teams-panel.sh"])
+    // The toggle script can take seconds when Teams is hidden in the tray or starting: show a loader line under the icon meanwhile
+    // and ignore clicks (a queued second toggle would just hide the panel again).
+    readonly property bool busy: toggler.running
+    Process { id: toggler; command: ["bash", "-c", "$HOME/.config/hypr/custom/teams-panel.sh"] }
+    onClicked: { if (!toggler.running) toggler.running = true; }
     altAction: () => {
         if (!root.trayItem || !root.trayItem.hasMenu) return;
         if (menu.active && menu.item && typeof menu.item.close === "function") menu.item.close();
@@ -70,17 +75,27 @@ RippleButton {
         iconSize: 20
         color: Appearance.colors.colOnLayer0
     }
-    Rectangle {
+    Rectangle {  // unread dot, same as the mail button
         visible: root.unread > 0
-        anchors { top: parent.top; right: parent.right; topMargin: 1; rightMargin: 1 }
-        implicitWidth: Math.max(14, badge.implicitWidth + 6); implicitHeight: 14; radius: 7
+        anchors { top: parent.top; right: parent.right; topMargin: 4; rightMargin: 4 }
+        implicitWidth: 8; implicitHeight: 8; radius: 4
         color: Appearance.colors.colPrimary
-        StyledText {
-            id: badge
-            anchors.centerIn: parent
-            text: root.unread > 99 ? "99+" : root.unread
-            font.pixelSize: 9
-            color: Appearance.colors.colOnPrimary
+    }
+    Item {  // indeterminate loader line below the icon
+        id: loader
+        visible: root.busy
+        anchors { bottom: parent.bottom; bottomMargin: 2; horizontalCenter: parent.horizontalCenter }
+        width: parent.width - 12; height: 2
+        clip: true
+        Rectangle { anchors.fill: parent; radius: 1; color: Appearance.colors.colOnLayer0; opacity: 0.2 }
+        Rectangle {
+            id: runner
+            height: parent.height; width: parent.width * 0.4; radius: 1
+            color: Appearance.colors.colPrimary
+            SequentialAnimation on x {
+                running: loader.visible; loops: Animation.Infinite
+                NumberAnimation { from: -runner.width; to: loader.width; duration: 900; easing.type: Easing.InOutQuad }
+            }
         }
     }
 }

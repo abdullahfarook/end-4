@@ -22,6 +22,10 @@ RippleButton {
     property var accounts: []              // [{ id, type, email, unread, ... }] from accounts.list
     property string accountFilter: ""      // "" = all accounts, else an account id
     property int _accountsReqId: -1
+    property var lastSeen: ({})            // accountId -> ISO time you last viewed that account's chip with the popup open
+    property var newest: ({})              // accountId -> lastMessageAt of its newest unread thread
+    property var fresh: ({})               // accountId -> true when unread mail arrived after lastSeen (chip shows a dot)
+    property var _newestReqs: ({})         // request id -> accountId
     property int _reqId: 0
     property int _statusReqId: -1
     property int _threadsReqId: -1
@@ -88,7 +92,23 @@ RippleButton {
         call("threads.previewOpened", { "id": id });
     }
     function closeThread() { selectedId = -1; currentThread = null; _threadReqId = -1; }
-    function setAccount(id) { accountFilter = id; accountStore.setText(id); limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
+    function updateFresh() {
+        const f = {};
+        for (const id in newest) f[id] = !!newest[id] && !!lastSeen[id] && Date.parse(newest[id]) > Date.parse(lastSeen[id]);
+        fresh = f;
+    }
+    // Viewing one account (popup open, that chip selected) counts as a visit; the first run starts everything as seen
+    function markSeen() {
+        const now = new Date().toISOString(), ls = Object.assign({}, lastSeen);
+        let changed = false;
+        for (const a of accounts) if (!ls[a.id]) { ls[a.id] = now; changed = true; }
+        if (popupOpen && accountFilter !== "") { ls[accountFilter] = now; changed = true; }
+        if (!changed) return;
+        lastSeen = ls;
+        seenStore.setText(JSON.stringify(ls));
+        updateFresh();
+    }
+    function setAccount(id) { accountFilter = id; markSeen(); accountStore.setText(id); limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
     function setView(v) { view = v; limit = pageSize; localExhausted = false; refresh(); }
     function handleResponse(msg) {
         if (msg.id === _olderReqId) {
@@ -103,10 +123,22 @@ RippleButton {
         if (msg.id === _syncReqId) { syncing = false; syncGuard.stop(); }
         if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
         if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
+        if (msg.id in _newestReqs && Array.isArray(msg.result)) {
+            const n = Object.assign({}, newest); n[_newestReqs[msg.id]] = msg.result.length ? msg.result[0].lastMessageAt : "";
+            newest = n; updateFresh();
+            if (popupOpen && accountFilter === _newestReqs[msg.id]) markSeen();
+            return;
+        }
         if (msg.id === _threadReqId && msg.result) { if (msg.result.id === selectedId) currentThread = msg.result; return; }
         if (msg.id === _accountsReqId && msg.result) {
             accounts = msg.result.accounts || msg.result;
             if (accountFilter !== "" && !accounts.some(a => a.id === accountFilter)) accountFilter = "";
+            if (seenStore.loaded) {
+                markSeen();
+                const reqs = {};
+                for (const a of accounts) reqs[call("threads.list", { "inbox": true, "unread": true, "limit": 1, "account": a.id })] = a.id;
+                _newestReqs = reqs;
+            }
         } else if (msg.id === _statusReqId && msg.result) {
             unread = msg.result.unread || 0;
             dnd = !!msg.result.dnd;
@@ -130,7 +162,7 @@ RippleButton {
     middleClickAction: () => toggleApp()       // middle click
     onClicked: {
         if (!daemonConnected) toggleApp();
-        else { popupOpen = !popupOpen; if (popupOpen) { limit = pageSize; refresh(); } else closeThread(); }
+        else { popupOpen = !popupOpen; if (popupOpen) { limit = pageSize; markSeen(); refresh(); } else closeThread(); }
     }
 
     Component.onCompleted: cmdSocket.connected = true
@@ -140,6 +172,15 @@ RippleButton {
         id: accountStore
         path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell/user/dankmail-account"
         onLoaded: { const id = text().trim(); if (id !== "" && id !== root.accountFilter) { root.accountFilter = id; root.refresh(); } }
+    }
+
+    // Per-account "last viewed" times, so a chip can show a dot for mail that arrived since
+    FileView {
+        id: seenStore
+        property bool loaded: false
+        path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell/user/dankmail-seen.json"
+        onLoaded: { try { root.lastSeen = JSON.parse(text()) || {}; } catch (e) { root.lastSeen = {}; } loaded = true; root.refresh(); }
+        onLoadFailed: { loaded = true; root.refresh(); }   // first run: no file yet
     }
 
     Socket {

@@ -175,7 +175,7 @@ LazyLoader {
                     Layout.leftMargin: 12; Layout.rightMargin: 12; Layout.bottomMargin: 10
                     spacing: 6
                     Repeater {
-                        model: [{ "id": "", "label": "All", "icon": "inbox", "logo": "", "unread": 0, "email": "All accounts" }].concat(root.store.accounts.map(a => ({ "id": a.id, "label": a.email.split("@")[0], "logo": a.type === "gmail" ? "gmail" : (a.type === "microsoft" || /(outlook|hotmail|live|msn)\./i.test(a.email)) ? "outlook" : "mail", "unread": a.unread || 0, "email": a.email })))
+                        model: [{ "id": "", "label": "All", "icon": "inbox", "logo": "", "unread": 0, "fresh": false, "email": "All accounts" }].concat(root.store.accounts.map(a => ({ "id": a.id, "label": a.email.split("@")[0], "logo": a.type === "gmail" ? "gmail" : (a.type === "microsoft" || /(outlook|hotmail|live|msn)\./i.test(a.email)) ? "outlook" : "mail", "unread": a.unread || 0, "fresh": !!root.store.fresh[a.id], "email": a.email })))
                         delegate: RippleButton {
                             id: chip
                             required property var modelData
@@ -223,7 +223,14 @@ LazyLoader {
                                     }
                                 }
                             }
-                            StyledToolTip { text: chip.modelData.email }
+                            Rectangle {  // new mail since you last viewed this account
+                                visible: chip.modelData.fresh && !chip.toggled
+                                anchors { top: parent.top; right: parent.right; topMargin: 3; rightMargin: 3 }
+                                implicitWidth: 9; implicitHeight: 9; radius: 5
+                                color: Appearance.colors.colPrimary
+                                border.width: 1.5; border.color: Appearance.colors.colLayer1
+                            }
+                            StyledToolTip { text: chip.modelData.email + (chip.modelData.fresh ? qsTr(" (new mail)") : "") }
                         }
                     }
                 }
