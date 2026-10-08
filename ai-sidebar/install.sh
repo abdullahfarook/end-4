@@ -14,7 +14,7 @@ if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar.patch" >/dev/null 2>
 else
     patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar.patch" && echo "QML patch applied (restart the shell)."
 fi
-if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar-stop.patch" >/dev/null 2>&1; then echo "Stop-menu patch already applied."
+if grep -q stopMenu "$Q/modules/ii/bar/LeftSidebarButton.qml" 2>/dev/null; then echo "Stop-menu patch already applied."  # not a reverse dry-run: the dismiss patch edits the same hunk
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop.patch" && echo "Stop-menu patch applied."; fi
 if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar-stop-dismiss.patch" >/dev/null 2>&1; then echo "Stop-menu dismiss patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop-dismiss.patch" && echo "Stop-menu dismiss patch applied."; fi
