@@ -60,8 +60,8 @@ ShellRoot {
             property bool open: false
             // short close delay so brief hover drops never flicker the drawer
             Timer { id: closeDelay; interval: 250; onTriggered: win.open = false }
-            readonly property int sw: 152   // fixed surface size: never resizes, so hover can't flicker
-            readonly property int sh: 58
+            readonly property int sw: 108   // fixed surface size: never resizes, so hover can't flicker
+            readonly property int sh: 38
             margins {
                 left: modelData.at[0] - (mon ? mon.x : 0) + (modelData.size[0] - sw) / 2
                 top: modelData.at[1] - (mon ? mon.y : 0)
@@ -94,17 +94,17 @@ ShellRoot {
             // drawer: slides down from the window's top edge, rounded at the bottom only
             Rectangle {
                 id: drawer
-                width: 136; height: 62; x: (win.sw - width) / 2
+                width: 108; height: 52; x: (win.sw - width) / 2
                 y: win.open ? -14 : -height
                 opacity: win.open ? 1 : 0
                 Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutBack; easing.overshoot: 0.8 } }
                 Behavior on opacity { NumberAnimation { duration: 140 } }
-                radius: 18; color: "#ff17171c"
+                radius: 16; color: "#ff17171c"
                 border.width: 1; border.color: "#14ffffff"
                 clip: true
 
                 Row {
-                    anchors.horizontalCenter: parent.horizontalCenter; y: 20; spacing: 8
+                    anchors.horizontalCenter: parent.horizontalCenter; y: 20; spacing: 6
                     visible: win.open
                     Repeater {
                         model: [
@@ -115,14 +115,14 @@ ShellRoot {
                         delegate: Rectangle {
                             id: btn
                             required property var modelData
-                            width: 32; height: 32; radius: 16
+                            width: 26; height: 26; radius: 13
                             color: ma.containsMouse ? (modelData.kind === "close" ? "#e5484d" : "#3d3d46") : "#26262d"
                             border.width: 1; border.color: "#14ffffff"
                             Behavior on color { ColorAnimation { duration: 100 } }
                             scale: ma.pressed ? 0.92 : 1
                             Behavior on scale { NumberAnimation { duration: 70 } }
                             Shape {
-                                anchors.centerIn: parent; width: 16; height: 16
+                                anchors.centerIn: parent; width: 16; height: 16; scale: 0.85
                                 layer.enabled: true; layer.samples: 4
                                 ShapePath {
                                     strokeColor: "#e8e8ee"; strokeWidth: 1.6; fillColor: "transparent"
