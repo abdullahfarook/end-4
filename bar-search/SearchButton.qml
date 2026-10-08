@@ -15,11 +15,19 @@ RippleButton {
     colBackground: ColorUtils.transparentize(Appearance.colors.colLayer1, 1)
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
-    toggled: GlobalStates.overviewOpen
+    property bool openedByClick: false  // background only when opened via this button, not via shortcuts
+    toggled: openedByClick && GlobalStates.overviewOpen
     colBackgroundToggled: Appearance.colors.colPrimary
     colBackgroundToggledHover: Appearance.colors.colPrimaryHover
 
-    onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+    onClicked: {
+        openedByClick = !GlobalStates.overviewOpen
+        GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+    }
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() { if (!GlobalStates.overviewOpen) root.openedByClick = false }
+    }
 
     Image {
         anchors.centerIn: parent
