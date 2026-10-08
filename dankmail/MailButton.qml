@@ -78,7 +78,7 @@ RippleButton {
         requestError = "";
         syncing = true;
         syncGuard.restart();
-        _syncReqId = call("system.sync", {});
+        _syncReqId = call("system.sync", accountFilter !== "" ? { "accountId": accountFilter } : {});
     }
     function selectThread(id) {
         if (id === selectedId) { closeThread(); return; }
@@ -88,7 +88,7 @@ RippleButton {
         call("threads.previewOpened", { "id": id });
     }
     function closeThread() { selectedId = -1; currentThread = null; _threadReqId = -1; }
-    function setAccount(id) { accountFilter = id; limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
+    function setAccount(id) { accountFilter = id; accountStore.setText(id); limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
     function setView(v) { view = v; limit = pageSize; localExhausted = false; refresh(); }
     function handleResponse(msg) {
         if (msg.id === _olderReqId) {
@@ -134,6 +134,13 @@ RippleButton {
     }
 
     Component.onCompleted: cmdSocket.connected = true
+
+    // Remembers the selected account across restarts (empty file / unknown id = all accounts)
+    FileView {
+        id: accountStore
+        path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell/user/dankmail-account"
+        onLoaded: { const id = text().trim(); if (id !== "" && id !== root.accountFilter) { root.accountFilter = id; root.refresh(); } }
+    }
 
     Socket {
         id: cmdSocket
