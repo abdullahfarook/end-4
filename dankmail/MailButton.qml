@@ -36,7 +36,7 @@ RippleButton {
     readonly property string socketPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/dankmail.sock"
 
     function toggleApp() {
-        if (daemonConnected) Quickshell.execDetached(["dmail", "toggle"]);
+        if (daemonConnected) Quickshell.execDetached(["bash", "-c", "$HOME/.config/hypr/custom/dankmail-toggle.sh"]);
         else Quickshell.execDetached(["systemctl", "--user", "start", "dmail"]);
     }
     function send(sock, obj) { sock.write(JSON.stringify(obj) + "\n"); sock.flush(); }

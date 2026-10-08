@@ -8,6 +8,7 @@ BACKUP="$HOME/backups/dankmail/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$Q/services/TrayService.qml" "$BACKUP/"
 for f in MailButton MailPopup MailRow MailMenu MailDetail; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
 install -Dm644 "$REPO/MailBody.js" "$Q/modules/ii/bar/MailBody.js"
+install -Dm755 "$REPO/dankmail-toggle.sh" "$HOME/.config/hypr/custom/dankmail-toggle.sh"
 # The mail button replaces dankmail's own tray icon: hide it from the right-hand tray.
 python3 - "$Q/services/TrayService.qml" <<'PY'
 import sys
