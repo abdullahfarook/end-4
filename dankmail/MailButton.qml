@@ -31,7 +31,7 @@ RippleButton {
     property int _reqId: 0
     property int _statusReqId: -1
     property int _threadsReqId: -1
-    property int _syncReqId: -1
+    property var _syncReqs: ({})           // ids of in-flight system.sync requests
     property int _threadReqId: -1
     property var currentThread: null       // full thread (with messages) shown in the popup's detail panel
     property int selectedId: -1
@@ -100,7 +100,12 @@ RippleButton {
         requestError = "";
         syncing = true;
         syncGuard.restart();
-        _syncReqId = call("system.sync", accountFilter !== "" ? { "accountId": accountFilter } : {});
+        // Account selected: sync just it. None selected: one request per account, all in flight at once.
+        const ids = accountFilter !== "" ? [accountFilter] : accounts.map(a => a.id);
+        const pending = {};
+        if (ids.length === 0) pending[call("system.sync", {})] = true;
+        for (const id of ids) pending[call("system.sync", { "accountId": id })] = true;
+        _syncReqs = pending;
     }
     function selectThread(id) {
         if (id === selectedId) { closeThread(); return; }
@@ -141,7 +146,10 @@ RippleButton {
             else if (!olderDone) loadMore();   // empty window: keep walking back
             return;
         }
-        if (msg.id === _syncReqId) { syncing = false; syncGuard.stop(); }
+        if (msg.id in _syncReqs) {
+            const p = Object.assign({}, _syncReqs); delete p[msg.id]; _syncReqs = p;
+            if (Object.keys(p).length === 0) { syncing = false; syncGuard.stop(); }
+        }
         if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
         if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
         if (msg.id in _newestReqs && Array.isArray(msg.result)) {
@@ -172,7 +180,7 @@ RippleButton {
     }
     function clearState() {
         unread = 0; dnd = false; threads = []; syncing = false; requestError = "";
-        _statusReqId = -1; _threadsReqId = -1; _syncReqId = -1; closeThread();
+        _statusReqId = -1; _threadsReqId = -1; _syncReqs = ({}); closeThread();
         loadingMore = false; _olderReqId = -1; olderNext = null; olderDone = false; localExhausted = false; limit = pageSize;
         syncGuard.stop();
     }
