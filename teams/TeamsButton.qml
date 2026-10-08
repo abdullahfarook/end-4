@@ -10,7 +10,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 // Bar button for the Teams panel (see teams-panel.sh). Left click toggles the panel; right click shows the same menu as
-// Teams' tray icon (Open, Join Meeting, Settings...). The dot shows when Teams has unread messages (it puts the count in its window title: "(3) Chat | ...").
+// Teams' tray icon (Open, Join Meeting, Settings...). The badge shows the count of unread Teams messages (it puts the count in its window title: "(3) Chat | ...").
 RippleButton {
     id: root
     property real buttonPadding: 5
@@ -78,11 +78,18 @@ RippleButton {
         color: Appearance.colors.colOnLayer0
         opacity: root.running ? 1 : 0.4
     }
-    Rectangle {  // unread dot, same as the mail button
+    Rectangle {  // unread count (Teams' own count: clears once you read the messages), hidden at 0
         visible: root.unread > 0
-        anchors { top: parent.top; right: parent.right; topMargin: 4; rightMargin: 4 }
-        implicitWidth: 8; implicitHeight: 8; radius: 4
+        anchors { top: parent.top; right: parent.right; topMargin: 2; rightMargin: 0 }
+        implicitWidth: Math.max(14, unreadText.implicitWidth + 8); implicitHeight: 14; radius: 7
         color: Appearance.colors.colPrimary
+        StyledText {
+            id: unreadText
+            anchors.centerIn: parent
+            text: root.unread > 99 ? "99+" : root.unread
+            font.pixelSize: 9
+            color: Appearance.colors.colOnPrimary
+        }
     }
     Item {  // indeterminate loader line below the icon
         id: loader

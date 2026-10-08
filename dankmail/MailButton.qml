@@ -24,6 +24,8 @@ RippleButton {
     property int _accountsReqId: -1
     property var lastSeen: ({})            // accountId -> ISO time you last viewed that account's chip with the popup open
     property var newest: ({})              // accountId -> lastMessageAt of its newest unread thread
+    property var times: ({})               // accountId -> lastMessageAt of each recent unread thread
+    property var counts: ({})              // accountId -> number of unread threads that arrived after lastSeen (chip badge)
     property var fresh: ({})               // accountId -> true when unread mail arrived after lastSeen (chip shows a dot)
     property var _newestReqs: ({})         // request id -> accountId
     property int _reqId: 0
@@ -112,6 +114,9 @@ RippleButton {
         const f = {};
         for (const id in newest) f[id] = !!newest[id] && !!lastSeen[id] && Date.parse(newest[id]) > Date.parse(lastSeen[id]);
         fresh = f;
+        const c = {};
+        for (const id in times) c[id] = !lastSeen[id] ? 0 : times[id].filter(t => Date.parse(t) > Date.parse(lastSeen[id])).length;
+        counts = c;
     }
     // Viewing one account (popup open, that chip selected) counts as a visit; the first run starts everything as seen
     function markSeen() {
@@ -141,7 +146,8 @@ RippleButton {
         if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
         if (msg.id in _newestReqs && Array.isArray(msg.result)) {
             const n = Object.assign({}, newest); n[_newestReqs[msg.id]] = msg.result.length ? msg.result[0].lastMessageAt : "";
-            newest = n; updateFresh();
+            const tm = Object.assign({}, times); tm[_newestReqs[msg.id]] = msg.result.map(t => t.lastMessageAt);
+            newest = n; times = tm; updateFresh();
             if (popupOpen && accountFilter === _newestReqs[msg.id]) markSeen();
             return;
         }
@@ -152,7 +158,7 @@ RippleButton {
             if (seenStore.loaded) {
                 markSeen();
                 const reqs = {};
-                for (const a of accounts) reqs[call("threads.list", { "inbox": true, "unread": true, "limit": 1, "account": a.id })] = a.id;
+                for (const a of accounts) reqs[call("threads.list", { "inbox": true, "unread": true, "limit": 100, "account": a.id })] = a.id;
                 _newestReqs = reqs;
             }
         } else if (msg.id === _statusReqId && msg.result) {
@@ -245,11 +251,19 @@ RippleButton {
         color: Appearance.colors.colOnLayer0
         opacity: root.daemonConnected ? 1 : 0.4
     }
-    Rectangle {  // unread dot (the cache only holds recent mail, so a count would be misleading)
-        visible: root.unread > 0
-        anchors { top: parent.top; right: parent.right; topMargin: 4; rightMargin: 4 }
-        implicitWidth: 8; implicitHeight: 8; radius: 4
+    readonly property int newTotal: { let n = 0; for (const id in counts) n += counts[id]; return n; }
+    Rectangle {  // new mail since you last viewed each account (hidden at 0)
+        visible: root.newTotal > 0
+        anchors { top: parent.top; right: parent.right; topMargin: 2; rightMargin: 0 }
+        implicitWidth: Math.max(14, newText.implicitWidth + 8); implicitHeight: 14; radius: 7
         color: root.dnd ? Appearance.colors.colOutline : Appearance.colors.colPrimary
+        StyledText {
+            id: newText
+            anchors.centerIn: parent
+            text: root.newTotal > 99 ? "99+" : root.newTotal
+            font.pixelSize: 9
+            color: Appearance.colors.colOnPrimary
+        }
     }
 
     Item {  // indeterminate loader line below the icon (same as the Teams button)
