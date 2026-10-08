@@ -89,7 +89,9 @@ ShellRoot {
             }
         }
     }
-    Timer { id: debounce; interval: 60; onTriggered: root.refresh() }
+    // refresh once quickly, then again after window animations settle (geometry is mid-animation at first)
+    Timer { id: debounce; interval: 60; onTriggered: { root.refresh(); settle.restart() } }
+    Timer { id: settle; interval: 450; onTriggered: root.refresh() }
     Connections {
         target: Hyprland
         function onRawEvent(ev) { debounce.restart() }
