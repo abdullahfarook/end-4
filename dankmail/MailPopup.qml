@@ -19,7 +19,20 @@ LazyLoader {
 
     active: open
 
-    component: PanelWindow {
+    component: Scope {
+      // Click-away layer instead of HyprlandFocusGrab: the grab made Hyprland refocus the last window, revealing hidden
+      // special-workspace panels (AI / Git) for an instant. A click anywhere closes the popup (so the bar button's own click
+      // also only closes it rather than closing and reopening).
+      PanelWindow {
+        color: "transparent"
+        anchors { left: true; right: true; top: true; bottom: true }
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
+        WlrLayershell.namespace: "quickshell:popup-dismiss"
+        WlrLayershell.layer: WlrLayer.Top
+        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.closeRequested() }
+      }
+      PanelWindow {
         id: popupWindow
         color: "transparent"
         anchors.left: true
@@ -37,12 +50,6 @@ LazyLoader {
         }
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay
-
-        HyprlandFocusGrab {
-            windows: [popupWindow]
-            active: true
-            onCleared: root.closeRequested()
-        }
 
         Item {
             id: wrap  // input region: list panel plus the detail panel when open
@@ -206,5 +213,6 @@ LazyLoader {
                 }
             }
         }
+      }
     }
 }
