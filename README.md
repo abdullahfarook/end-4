@@ -15,6 +15,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 | `cursor/` | Pointer no longer jumps back to a dialog (`cursor.no_warps = true`) | `~/.config/hypr/hyprland/general.lua` |
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
 | `bar-search/` | Search button in the bar right of the workspaces; opens the SUPER-key overview/launcher | `~/.config/quickshell/ii/` (BarContent patch + SearchButton.qml) |
+| `close-button/` | Small ✕ at the top-right corner of windows whose app has no close button (Dolphin, Konsole, kitty, … list in `shell.qml`); click closes the window. Runs as its own `qs -c closebutton` | `~/.config/quickshell/closebutton/`, `~/.config/hypr/custom/execs.lua` |
 
 ## Workflow: change, back up, apply, push
 
