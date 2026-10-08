@@ -109,7 +109,9 @@ function format(text, options) {
 
 // Reduce a message's original HTML to the subset Qt's rich text renders (no CSS, scripts or layout tricks).
 // width caps image/table width in px; remote images still load. Returns "" for empty input.
-function cleanHtml(h, width) {
+// loaded (optional) = { url: {w, h} } for images that preloaded successfully: only those are embedded, so Qt's text view never
+// issues (and loops on) a failing remote image request; the rest are left out.
+function cleanHtml(h, width, loaded) {
     if (!h) return "";
     h = h.replace(/<!--[\s\S]*?-->/g, "");
     h = h.replace(/<(head|style|script|title|svg|noscript)\b[\s\S]*?<\/\1>/gi, "");
@@ -127,13 +129,31 @@ function cleanHtml(h, width) {
     h = h.replace(/<(td|th)\b[^>]*>/gi, "<$1>");
     h = h.replace(/<img\b[^>]*?>/gi, tag => {
         const src = tag.match(/\bsrc="([^"]+)"/i);
-        if (!src || !/^https?:/i.test(src[1])) return "";
+        const url = src ? src[1].replace(/&amp;/g, "&") : "";
+        if (!/^https?:/i.test(url)) return "";
+        const known = loaded ? loaded[url] : null;
+        if (loaded && !known) return "";
+        const attr = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
         const wm = tag.match(/\bwidth="?(\d+)/i);
-        if (!wm) return '<img src="' + src[1] + '">';  // natural size (e.g. small icons)
-        const w = Math.min(parseInt(wm[1]), width);
-        return w <= 3 ? "" : '<img src="' + src[1] + '" width="' + w + '">';
+        let w = wm ? Math.min(parseInt(wm[1]), width) : (known ? Math.min(known.w, width) : 0);
+        if (wm && w <= 3) return "";
+        if (!w) return '<img src="' + attr + '">';
+        const hh = known && known.w > 0 ? ' height="' + Math.max(1, Math.round(w * known.h / known.w)) + '"' : "";  // reserve the exact height
+        return '<img src="' + attr + '" width="' + w + '"' + hh + '>';
     });
     h = h.replace(/<div\b[^>]*>/gi, "<p>").replace(/<\/div>/gi, "</p>");
     h = h.replace(/(<p>\s*(&nbsp;)?\s*<\/p>\s*){2,}/gi, "<p></p>");
     return h;
+}
+
+// Remote image URLs in the original HTML (entity-decoded, the same URLs cleanHtml emits), for preloading.
+function imageSources(h) {
+    const out = [];
+    (h || "").replace(/<img\b[^>]*?>/gi, tag => {
+        const src = tag.match(/\bsrc="([^"]+)"/i);
+        const url = src ? src[1].replace(/&amp;/g, "&") : "";
+        if (/^https?:/i.test(url) && out.indexOf(url) < 0) out.push(url);
+        return tag;
+    });
+    return out;
 }

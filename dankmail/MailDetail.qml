@@ -108,10 +108,26 @@ Rectangle {
                 width: messages.width
                 spacing: 0
                 readonly property string original: detail.store.rawHtml[modelData.id] || ""
-                readonly property string html: original !== "" ? BodyFormatter.cleanHtml(original, Math.max(200, Math.floor(messages.width - 30))) : BodyFormatter.format(modelData.bodyText || modelData.snippet || "", {
+                readonly property var imageSrcs: original !== "" ? BodyFormatter.imageSources(original) : []
+                property var imagesLoaded: ({})  // url -> {w, h} once an image preloaded fine; failed ones never appear
+                readonly property string html: original !== "" ? BodyFormatter.cleanHtml(original, Math.max(200, Math.floor(messages.width - 30)), msg.imagesLoaded) : BodyFormatter.format(modelData.bodyText || modelData.snippet || "", {
                     "linkColor": String(Appearance.colors.colPrimary),
                     "quoteColor": String(Appearance.colors.colSubtext)
                 })
+                Repeater {  // preload with plain Image items; the text view only gets images that loaded (its own failed requests spin the GUI thread)
+                    model: msg.imageSrcs
+                    Image {
+                        required property string modelData
+                        visible: false
+                        asynchronous: true
+                        source: modelData
+                        onStatusChanged: if (status === Image.Ready && implicitWidth > 0) {
+                            const l = Object.assign({}, msg.imagesLoaded);
+                            l[modelData] = { "w": implicitWidth, "h": implicitHeight };
+                            msg.imagesLoaded = l;
+                        }
+                    }
+                }
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.margins: 14
