@@ -1,7 +1,8 @@
 //@ pragma UseQApplication
-// Breeze-style window buttons (minimize / maximize / close) drawn by the shell at the top-right corner of
-// windows whose app has no buttons of its own. Idle: small handle at the top-centre of the window;
-// hover: a drawer slides down with three circles.
+// Breeze-style window buttons (drag / maximize / close) drawn by the shell for windows whose app has no
+// buttons of its own. Idle: small handle at the top-centre of the window; hover: a drawer slides down with
+// three circles. The grip circle drags the window: drop on the left/right screen edge to send it to the
+// previous/next workspace.
 import QtQuick
 import QtQuick.Shapes
 import Quickshell
@@ -17,7 +18,64 @@ ShellRoot {
         "org.kde.discover", "systemsettings", "pavucontrol", "nm-connection-editor", "org.gnome.nautilus"]
     property var wins: []
 
-    function refresh() { clientsProc.running = true }
+    // --- grip drag: the window follows the cursor over an overview-style workspace grid (2 rows x 5) ---
+    property string dragAddr: ""
+    property var dragScreen: null
+    property var dragWin: null       // client being dragged (position/size/floating at drag start)
+    property real dragX: 0
+    property real dragY: 0
+    property double lastMove: 0
+    readonly property int edge: 48   // px at the left/right screen edge that act as "previous / next workspace" drop zones
+    // -1 = previous workspace (left edge), +1 = next (right edge), 0 = none
+    function edgeAt(x, sw) { return x <= edge ? -1 : (x >= sw - edge ? 1 : 0) }
+    function track(win, mx, my, area) {
+        const p = area.mapToItem(null, mx, my)
+        dragX = win.margins.left + p.x
+        dragY = win.margins.top + p.y
+        const now = Date.now()
+        if (now - lastMove < 16) return
+        lastMove = now
+        const mon = win.mon
+        Hyprland.dispatch("hl.dsp.window.move({ x = " + Math.round(dragX + mon.x - dragWin.size[0] / 2) + ", y = " + Math.round(dragY + mon.y - 12)
+            + ", window = 'address:" + dragAddr + "' })")
+    }
+    function beginDrag(win, mx, my, area) {
+        dragWin = win.modelData
+        dragScreen = win.screen
+        dragAddr = win.modelData.address
+        const p = area.mapToItem(null, mx, my)
+        dragX = win.margins.left + p.x
+        dragY = win.margins.top + p.y
+        if (!dragWin.floating) Hyprland.dispatch("hl.dsp.window.float({ action = 'enable', window = 'address:" + dragAddr + "' })")
+    }
+    function endDrag() {
+        if (dragAddr === "") return
+        const dir = edgeAt(dragX, dragScreen.width)
+        const ws = Math.max(1, dragWin.workspace.id + dir)
+        const addr = dragAddr, w = dragWin
+        dragAddr = ""
+        if (dir !== 0) act.run(addr, "hl.dsp.window.move({ workspace = " + ws + ", follow = false, window = '%A' })")
+        else Hyprland.dispatch("hl.dsp.window.move({ x = " + w.at[0] + ", y = " + w.at[1] + ", window = 'address:" + addr + "' })")
+        if (!w.floating) Hyprland.dispatch("hl.dsp.window.float({ action = 'disable', window = 'address:" + addr + "' })")
+        debounce.restart()
+    }
+
+    // click-through overlay shown while dragging: only a faint strip on the screen edge the cursor is over
+    PanelWindow {
+        visible: root.dragAddr !== ""
+        screen: root.dragScreen
+        color: "transparent"
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell:closebutton-drag"
+        mask: Region {}
+        readonly property int dir: root.dragScreen ? root.edgeAt(root.dragX, root.dragScreen.width) : 0
+        Rectangle { visible: parent.dir === -1; x: 0; width: root.edge; height: parent.height; color: "#337aa2ff" }
+        Rectangle { visible: parent.dir === 1; x: parent.width - root.edge; width: root.edge; height: parent.height; color: "#337aa2ff" }
+    }
+
+    function refresh() { if (dragAddr === "") clientsProc.running = true }
 
     Process {
         id: clientsProc
@@ -129,7 +187,6 @@ ShellRoot {
                                     capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
                                     PathPolyline {
                                         path: btn.modelData.kind === "drag" ? []
-                                            : btn.modelData.kind === "min" ? [Qt.point(3, 6), Qt.point(8, 11), Qt.point(13, 6)]
                                             : btn.modelData.kind === "max" ? [Qt.point(8, 2), Qt.point(14, 8), Qt.point(8, 14), Qt.point(2, 8), Qt.point(8, 2)]
                                             : [Qt.point(3, 3), Qt.point(13, 13)]
                                     }
@@ -148,19 +205,13 @@ ShellRoot {
                             }
                             MouseArea {
                                 id: ma; anchors.fill: parent; hoverEnabled: true
-                                // double-click: ydotool holds the left button down so the drag follows the cursor; the next real click drops it
-                                onDoubleClicked: if (btn.modelData.kind === "drag") {
-                                    act.command = ["sh", "-c", "sleep 0.15; ydotool click 0x40"]
-                                    act.running = true
-                                }
+                                preventStealing: true
                                 onClicked: if (btn.modelData.kind !== "drag") act.run(win.modelData.address, btn.modelData.cmd)
-                                // hand: hovering focuses the window and arms the "handdrag" submap, so the press starts a real drag
-                                onContainsMouseChanged: if (btn.modelData.kind === "drag") {
-                                    act.command = ["sh", "-c", containsMouse
-                                        ? "hyprctl dispatch 'hl.dsp.focus({ window = \"address:" + win.modelData.address + "\" })'; hyprctl dispatch 'hl.dsp.submap(\"handdrag\")'"
-                                        : "hyprctl dispatch 'hl.dsp.submap(\"reset\")'"]
-                                    act.running = true
-                                }
+                                // grip: press and drag (tap-and-drag on the touchpad); the window follows the cursor, release over a tile moves it there
+                                onPressed: mouse => { if (btn.modelData.kind === "drag") { closeDelay.stop(); root.beginDrag(win, mouse.x, mouse.y, ma) } }
+                                onPositionChanged: mouse => { if (root.dragAddr !== "" && btn.modelData.kind === "drag") root.track(win, mouse.x, mouse.y, ma) }
+                                onReleased: if (btn.modelData.kind === "drag") root.endDrag()
+                                onCanceled: if (btn.modelData.kind === "drag") root.endDrag()
                             }
                         }
                     }
