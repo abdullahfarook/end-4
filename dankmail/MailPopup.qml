@@ -19,20 +19,26 @@ LazyLoader {
     property Item hoverTarget
     signal closeRequested()
 
-    active: open
+    // Stay loaded after the first open and just hide the windows: tearing the whole popup down made closing lag
+    property bool everOpened: false
+    onOpenChanged: if (open) everOpened = true
+    active: open || everOpened
 
     component: Scope {
       // Click-away layer instead of HyprlandFocusGrab: the grab made Hyprland refocus the last window, revealing hidden
       // special-workspace panels (AI / Git) for an instant. A click anywhere closes the popup (so the bar button's own click
       // also only closes it rather than closing and reopening).
+      // Both windows stay mapped once created (hidden = empty input region, nothing drawn): unmapping a layer made Hyprland
+      // refocus the last window, which flashed the AI panel open
       PanelWindow {
+        mask: Region { item: root.open ? dismissArea : null }
         color: "transparent"
         anchors { left: true; right: true; top: true; bottom: true }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:popup-dismiss"
         WlrLayershell.layer: WlrLayer.Top
-        MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.closeRequested() }
+        MouseArea { id: dismissArea; anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.closeRequested() }
       }
       PanelWindow {
         id: popupWindow
@@ -45,7 +51,7 @@ LazyLoader {
         readonly property int contentHeight: root.popupHeight > 0 ? root.popupHeight : fullHeight
         implicitWidth: 440 + (detailOpen ? 8 + root.detailWidth : 0) + Appearance.sizes.elevationMargin * 2
         implicitHeight: contentHeight + Appearance.sizes.elevationMargin * 2
-        mask: Region { item: wrap }
+        mask: Region { item: root.open ? wrap : null }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         margins {
@@ -54,7 +60,8 @@ LazyLoader {
         }
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand  // lets the inline reply box take typing
+        // Only take keyboard focus while replying: a focused popup makes Hyprland refocus the last window on close, flashing the AI panel
+        WlrLayershell.keyboardFocus: detail.visible && detail.replying ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         Item {
             id: wrap  // input region: list panel plus the detail panel when open
@@ -62,12 +69,12 @@ LazyLoader {
             width: 440 + (popupWindow.detailOpen ? 8 + root.detailWidth : 0)
         }
 
-        StyledRectangularShadow { target: panel }
-        StyledRectangularShadow { target: detail; visible: detail.visible }
+        StyledRectangularShadow { target: panel; visible: root.open }
+        StyledRectangularShadow { target: detail; visible: root.open && detail.visible }
 
         MailDetail {
             id: detail
-            visible: popupWindow.detailOpen
+            visible: root.open && popupWindow.detailOpen
             store: root.store
             anchors { left: panel.right; top: parent.top; bottom: parent.bottom; right: parent.right; leftMargin: 8; topMargin: Appearance.sizes.elevationMargin; bottomMargin: Appearance.sizes.elevationMargin; rightMargin: Appearance.sizes.elevationMargin }
             onCloseRequested: root.store.closeThread()
@@ -97,6 +104,7 @@ LazyLoader {
 
         Rectangle {
             id: panel
+            visible: root.open
             anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: Appearance.sizes.elevationMargin; topMargin: Appearance.sizes.elevationMargin; bottomMargin: Appearance.sizes.elevationMargin }
             width: 440
             implicitHeight: header.implicitHeight + (listArea.implicitHeight) + 20

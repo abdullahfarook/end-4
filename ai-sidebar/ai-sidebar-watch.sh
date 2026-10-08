@@ -7,6 +7,10 @@ sock="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     case "$line" in
     openlayer\>\>quickshell:overview) "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"; continue ;;  # SUPER launcher/overview opened: close the panel
+    closelayer\>\>quickshell:popup-dismiss) popup_closed=$(date +%s%3N); continue ;;  # a bar popup (mail) closed: Hyprland may refocus the AI window and reveal its panel
+    activespecial\>\>special:ai,*)
+        [ -n "${popup_closed:-}" ] && [ $(( $(date +%s%3N) - popup_closed )) -lt 400 ] && "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
+        popup_closed=; continue ;;
     openwindow\>\>*)  # a window mapped while the panel is shown (e.g. Teams from the tray) lands on special:ai: close the panel and move it out
         IFS=, read -r addr ws class _ <<<"${line#openwindow>>}"
         [ "$ws" = special:ai ] && [ "$class" != ai-sidebar ] || continue
