@@ -1,0 +1,67 @@
+--- a/modules/ii/bar/LeftSidebarButton.qml	2026-10-08 13:40:47.698046418 +0500
++++ b/modules/ii/bar/LeftSidebarButton.qml	2026-10-08 13:40:47.699598742 +0500
+@@ -1,4 +1,7 @@
+ import QtQuick
++import QtQuick.Layouts
++import Quickshell
++import Quickshell.Hyprland
+ import qs
+ import qs.services
+ import qs.modules.common
+@@ -29,6 +32,56 @@
+         GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+     }
+ 
++    altAction: () => { stopMenu.visible = !stopMenu.visible; }
++
++    // Right-click menu: stop the AI sidebar terminal
++    PopupWindow {
++        id: stopMenu
++        color: "transparent"
++        implicitWidth: 112 + 2 * Appearance.sizes.elevationMargin
++        implicitHeight: 44 + 2 * Appearance.sizes.elevationMargin
++        anchor {
++            window: root.QsWindow.window
++            item: root
++            edges: Edges.Bottom
++            gravity: Edges.Bottom
++            rect.x: (root.width - stopMenu.implicitWidth) / 2
++            rect.y: root.height
++        }
++        HyprlandFocusGrab {
++            active: stopMenu.visible
++            windows: [stopMenu]
++            onCleared: stopMenu.visible = false
++        }
++        StyledRectangularShadow { target: menuBg }
++        Rectangle {
++            id: menuBg
++            anchors.fill: parent
++            anchors.margins: Appearance.sizes.elevationMargin
++            color: Appearance.colors.colLayer0
++            radius: Appearance.rounding.windowRounding
++            border.width: 1
++            border.color: Appearance.colors.colLayer0Border
++            RippleButton {
++                anchors.fill: parent
++                anchors.margins: 4
++                buttonRadius: Appearance.rounding.small
++                colBackground: "transparent"
++                onClicked: {
++                    stopMenu.visible = false;
++                    Quickshell.execDetached(["bash", "-c", "$HOME/.config/hypr/custom/ai-sidebar-stop.sh"]);
++                }
++                contentItem: RowLayout {
++                    spacing: 6
++                    Item { Layout.fillWidth: true }
++                    MaterialSymbol { text: "stop_circle"; iconSize: 18; color: Appearance.colors.colOnLayer0 }
++                    StyledText { text: "Stop"; color: Appearance.colors.colOnLayer0 }
++                    Item { Layout.fillWidth: true }
++                }
++            }
++        }
++    }
++
+     Connections {
+         target: Ai
+         function onResponseFinished() {

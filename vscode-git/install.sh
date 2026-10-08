@@ -15,7 +15,7 @@ code --user-data-dir "$D" --extensions-dir "$D/extensions" --install-extension "
 if grep -q "VscodeGitButton {" "$Q/modules/ii/bar/BarContent.qml"; then echo "QML patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/vscode-git.patch" && echo "QML patch applied (restart the shell)."; fi
 install -Dm644 "$REPO/VscodeGitButton.qml" "$Q/modules/ii/bar/VscodeGitButton.qml"
-for f in vscode-git.sh vscode-git-watch.sh vscode-git-clickaway.sh vscode-git-hide.sh vscode-git-close.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
+for f in vscode-git.sh vscode-git-watch.sh vscode-git-clickaway.sh vscode-git-hide.sh vscode-git-close.sh vscode-git-stop.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 python3 - "$KEYBINDS" "$REPO/vscode-git-keybinds.lua" <<'PY'
 import re, sys
 target, snippet = sys.argv[1], open(sys.argv[2]).read().rstrip("\n")

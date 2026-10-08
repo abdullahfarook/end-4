@@ -4,7 +4,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"
 KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
-FILES=(modules/common/Config.qml modules/settings/ServicesConfig.qml modules/ii/sidebarLeft/SidebarLeft.qml)
+FILES=(modules/common/Config.qml modules/settings/ServicesConfig.qml modules/ii/sidebarLeft/SidebarLeft.qml modules/ii/bar/LeftSidebarButton.qml)
 BACKUP="$HOME/backups/ai-sidebar/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BACKUP/"
 for f in "${FILES[@]}"; do mkdir -p "$BACKUP/$(dirname "$f")"; cp "$Q/$f" "$BACKUP/$f"; done
@@ -14,7 +14,9 @@ if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar.patch" >/dev/null 2>
 else
     patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar.patch" && echo "QML patch applied (restart the shell)."
 fi
-for f in ai-sidebar.sh ai-sidebar-watch.sh ai-sidebar-clickaway.sh ai-sidebar-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
+if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar-stop.patch" >/dev/null 2>&1; then echo "Stop-menu patch already applied."
+else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop.patch" && echo "Stop-menu patch applied."; fi
+for f in ai-sidebar-stop.sh ai-sidebar.sh ai-sidebar-watch.sh ai-sidebar-clickaway.sh ai-sidebar-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 python3 - "$KEYBINDS" "$REPO/ai-sidebar-keybinds.lua" <<'PY'
 import re, sys
 target, snippet = sys.argv[1], open(sys.argv[2]).read().rstrip("\n")
