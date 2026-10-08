@@ -6,7 +6,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/dankmail/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$BACKUP/"
-install -Dm644 "$REPO/MailButton.qml" "$Q/modules/ii/bar/MailButton.qml"
+for f in MailButton MailPopup MailRow MailMenu; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
 python3 - "$BAR" "$KEYBINDS" "$REPO/dankmail-keybinds.lua" <<'PY'
 import re, sys
 bar, kb, snippet = sys.argv[1], sys.argv[2], open(sys.argv[3]).read().rstrip("\n")
