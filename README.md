@@ -16,6 +16,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
 | `bar-search/` | Search button in the bar right of the workspaces; opens the SUPER-key overview/launcher | `~/.config/quickshell/ii/` (BarContent patch + SearchButton.qml) |
 | `close-button/` | Small ✕ at the top-right corner of windows whose app has no close button (Dolphin, Konsole, kitty, … list in `shell.qml`); click closes the window. Runs as its own `qs -c closebutton` | `~/.config/quickshell/closebutton/`, `~/.config/hypr/custom/execs.lua` |
+| `dankmail/` | Mail widget (bar button, popup, thread detail). In the detail view, email images load as separate items with a spinner each; Qt's rich-text image loader is avoided because it flashes a pixelated placeholder icon. Failed images are dropped. Trade-off: side-by-side image layouts stack vertically and linked images aren't clickable | `~/.config/quickshell/ii/` (MailDetail.qml, MailBody.js) |
 
 ## Workflow: change, back up, apply, push
 

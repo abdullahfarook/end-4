@@ -157,3 +157,21 @@ function imageSources(h) {
     });
     return out;
 }
+
+// Loading skeleton: the cleaned HTML split at every remote image into [{html}|{img:true, w, h}] so the view can show a
+// spinner per image while they load. w/h come from the tag's width/height attributes (0 when unknown).
+function segments(h, width) {
+    const out = [];
+    let last = 0;
+    const c = cleanHtml(h, width);
+    c.replace(/<img\b[^>]*?>/gi, (tag, off) => {
+        if (off > last) out.push({ "html": c.slice(last, off) });
+        const wm = tag.match(/\bwidth="?(\d+)/i);
+        const sm = tag.match(/\bsrc="([^"]+)"/i);
+        out.push({ "img": true, "w": wm ? parseInt(wm[1]) : 0, "url": sm ? sm[1].replace(/&amp;/g, "&") : "" });
+        last = off + tag.length;
+        return tag;
+    });
+    if (last < c.length) out.push({ "html": c.slice(last) });
+    return out;
+}

@@ -101,6 +101,43 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
             model: detail.thread ? detail.thread.messages : []
             ScrollBar.vertical: StyledScrollBar {}
+            Component {
+                id: imageSlot
+                Item {
+                    id: slot
+                    property var seg: ({})
+                    readonly property real maxW: Math.max(200, Math.floor(messages.width - 30))
+                    implicitHeight: img.status === Image.Error || (img.status === Image.Null && !seg.url) ? 0
+                        : img.status === Image.Ready ? img.paintedHeight : Math.max(48, Math.min(160, (seg.w || 120) * 0.5))
+                    Image {
+                        id: img
+                        asynchronous: true
+                        source: slot.seg.url || ""
+                        fillMode: Image.PreserveAspectFit
+                        width: Math.min(slot.seg.w > 0 ? slot.seg.w : implicitWidth, slot.maxW)
+                        height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : 0
+                        visible: status === Image.Ready
+                    }
+                    MaterialLoadingIndicator {
+                        visible: img.status === Image.Loading
+                        anchors.centerIn: parent; implicitWidth: 32; implicitHeight: 32
+                    }
+                }
+            }
+            Component {
+                id: textSlot
+                Text {
+                    property var seg: ({})
+                    text: seg.html
+                    textFormat: Text.RichText
+                    wrapMode: Text.Wrap
+                    font.family: Appearance.font.family.main
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer1
+                    linkColor: Appearance.colors.colPrimary
+                    onLinkActivated: link => Qt.openUrlExternally(link)
+                }
+            }
             delegate: ColumnLayout {
                 id: msg
                 required property var modelData
@@ -114,20 +151,6 @@ Rectangle {
                     "linkColor": String(Appearance.colors.colPrimary),
                     "quoteColor": String(Appearance.colors.colSubtext)
                 })
-                Repeater {  // preload with plain Image items; the text view only gets images that loaded (its own failed requests spin the GUI thread)
-                    model: msg.imageSrcs
-                    Image {
-                        required property string modelData
-                        visible: false
-                        asynchronous: true
-                        source: modelData
-                        onStatusChanged: if (status === Image.Ready && implicitWidth > 0) {
-                            const l = Object.assign({}, msg.imagesLoaded);
-                            l[modelData] = { "w": implicitWidth, "h": implicitHeight };
-                            msg.imagesLoaded = l;
-                        }
-                    }
-                }
                 ColumnLayout {
                     Layout.fillWidth: true
                     Layout.margins: 14
@@ -170,17 +193,15 @@ Rectangle {
                             color: Appearance.colors.colSubtext
                         }
                     }
-                    Text {
-                        Layout.fillWidth: true
-                        text: msg.html
-                        textFormat: Text.RichText
-                        wrapMode: Text.Wrap
-                        font.family: Appearance.font.family.main
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnLayer1
-                        linkColor: Appearance.colors.colPrimary
-                        onLinkActivated: link => Qt.openUrlExternally(link)
-                        HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                    Repeater {  // text and images as separate items: images are plain QML Images (spinner until ready), never Qt's text-view image loader (its placeholder icon)
+                        model: msg.original !== "" ? BodyFormatter.segments(msg.original, Math.max(200, Math.floor(messages.width - 30))) : [{ "html": msg.html }]
+                        delegate: Loader {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: item ? item.implicitHeight : 0
+                            sourceComponent: modelData.img ? imageSlot : textSlot
+                            onLoaded: item.seg = modelData
+                        }
                     }
                 }
                 Rectangle {
