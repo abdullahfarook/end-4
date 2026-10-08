@@ -20,19 +20,19 @@ diff -u -r a/modules/ii/bar/ResourcesPopup.qml b/modules/ii/bar/ResourcesPopup.q
 +                    Layout.fillWidth: true
 +                    icon: "clock_loader_60"
 +                    label: Translation.tr("Used:")
-+                    value: `${Math.round(ResourceUsage.diskUsedGB)} GB`
++                    value: `${ResourceUsage.diskUsedGB.toFixed(1)} GiB`
 +                }
 +                StyledPopupValueRow {
 +                    Layout.fillWidth: true
 +                    icon: "check_circle"
 +                    label: Translation.tr("Free:")
-+                    value: `${Math.round(ResourceUsage.diskFreeGB)} GB`
++                    value: `${ResourceUsage.diskFreeGB.toFixed(1)} GiB`
 +                }
 +                StyledPopupValueRow {
 +                    Layout.fillWidth: true
 +                    icon: "empty_dashboard"
 +                    label: Translation.tr("Total:")
-+                    value: `${Math.round(ResourceUsage.diskTotalGB)} GB`
++                    value: `${ResourceUsage.diskTotalGB.toFixed(1)} GiB`
 +                }
 +            }
 +        }
@@ -90,9 +90,9 @@ diff -u -r a/services/ResourceUsage.qml b/services/ResourceUsage.qml
 +        stdout: StdioCollector {
 +            onStreamFinished: {
 +                const [size, used, avail] = text.trim().split(/\s+/).map(Number);
-+                root.diskTotalGB = (size || 0) / 1e9;
-+                root.diskUsedGB = (used || 0) / 1e9;
-+                root.diskFreeGB = (avail || 0) / 1e9;
++                root.diskTotalGB = (size || 0) / 1073741824;
++                root.diskUsedGB = (used || 0) / 1073741824;
++                root.diskFreeGB = (avail || 0) / 1073741824;
 +            }
 +        }
 +    }
