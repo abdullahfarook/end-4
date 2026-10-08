@@ -1,5 +1,5 @@
 diff -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
---- a/modules/common/Directories.qml	2026-10-04 17:36:28.450326152 +0500
+--- a/modules/common/Directories.qml	2026-10-08 06:35:23.477043081 +0500
 +++ files/modules/common/Directories.qml	2026-10-04 17:36:07.341161768 +0500
 @@ -34,6 +34,7 @@
      property string shellConfigName: "config.json"
@@ -10,8 +10,8 @@ diff -ruN a/modules/common/Directories.qml files/modules/common/Directories.qml
  	property string conflictCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/conflict-killer`)
      property string notificationsPath: FileUtils.trimFileProtocol(`${Directories.cache}/notifications/notifications.json`)
 diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/SearchWidget.qml
---- a/modules/ii/overview/SearchWidget.qml	2026-10-04 17:36:28.452326167 +0500
-+++ files/modules/ii/overview/SearchWidget.qml	2026-10-07 19:18:52.222961439 +0500
+--- a/modules/ii/overview/SearchWidget.qml	2026-10-08 06:35:23.476998544 +0500
++++ files/modules/ii/overview/SearchWidget.qml	2026-10-08 06:28:30.445293820 +0500
 @@ -5,6 +5,7 @@
  import QtQuick
  import QtQuick.Layouts
@@ -29,7 +29,18 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
      implicitWidth: searchWidgetContent.implicitWidth + Appearance.sizes.elevationMargin * 2
      implicitHeight: searchWidgetContent.implicitHeight + searchBar.verticalPadding * 2 + Appearance.sizes.elevationMargin * 2
  
-@@ -150,6 +153,124 @@
+@@ -141,8 +144,8 @@
+                 id: searchBar
+                 property real verticalPadding: 4
+                 Layout.fillWidth: true
+-                Layout.leftMargin: 10
+-                Layout.rightMargin: 4
++                Layout.leftMargin: 6
++                Layout.rightMargin: 0
+                 Layout.topMargin: verticalPadding
+                 Layout.bottomMargin: verticalPadding
+                 Synchronizer on searchingText {
+@@ -150,6 +153,104 @@
                  }
              }
  
@@ -54,7 +65,7 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
 +                id: pinnedRow
 +                anchors.fill: parent
 +                spacing: 2
-+                property bool editMode: false
++                property bool editMode: searchBar.pinEditMode
 +                property var pinnedEntries: Config.options.launcher.pinnedApps
 +                    .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? LauncherApps.entryForClass(id))
 +                    .filter(Boolean)
@@ -128,26 +139,6 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
 +                        }
 +                    }
 +                }
-+
-+                RippleButton { // Edit / done
-+                    implicitWidth: 36
-+                    implicitHeight: 36
-+                    buttonRadius: Appearance.rounding.small
-+                    toggled: pinnedRow.editMode
-+                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
-+                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-+                    onClicked: pinnedRow.editMode = !pinnedRow.editMode
-+                    contentItem: MaterialSymbol {
-+                        anchors.centerIn: parent
-+                        horizontalAlignment: Text.AlignHCenter
-+                        text: pinnedRow.editMode ? "check" : "edit"
-+                        iconSize: 20
-+                        color: pinnedRow.editMode ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
-+                    }
-+                    StyledToolTip {
-+                        text: pinnedRow.editMode ? Translation.tr("Done") : Translation.tr("Edit pinned apps")
-+                    }
-+                }
 +            }
 +            }
 +
@@ -155,7 +146,7 @@ diff -ruN a/modules/ii/overview/SearchWidget.qml files/modules/ii/overview/Searc
                  // Separator
                  visible: root.showResults
 diff -ruN a/services/AppSearch.qml files/services/AppSearch.qml
---- a/services/AppSearch.qml	2026-10-04 17:36:28.453326175 +0500
+--- a/services/AppSearch.qml	2026-10-08 06:35:23.476902503 +0500
 +++ files/services/AppSearch.qml	2026-10-04 17:36:07.336161729 +0500
 @@ -3,6 +3,8 @@
  import qs.modules.common
@@ -241,9 +232,80 @@ diff -ruN a/services/AppSearch.qml files/services/AppSearch.qml
  
      function iconExists(iconName) {
 diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
---- a/services/LauncherSearch.qml	2026-10-04 17:36:28.454326183 +0500
-+++ files/services/LauncherSearch.qml	2026-10-04 17:36:07.336161729 +0500
-@@ -164,11 +164,51 @@
+--- a/services/LauncherSearch.qml	2026-10-08 06:35:23.476941521 +0500
++++ files/services/LauncherSearch.qml	2026-10-08 06:35:23.464352810 +0500
+@@ -146,9 +146,70 @@
+                 expr = expr.slice(Config.options.search.prefix.math.length);
+             }
+             mathProc.calculateExpression(expr);
++            fileProc.search(root.query);
+         }
+     }
+ 
++    // Folders under $HOME, found with fd (live search; shortest paths first)
++    property var fileResults: []
++    Process {
++        id: fileProc
++        property var found: []
++        function search(text) {
++            fileProc.running = false;
++            const q = text.trim();
++            const prefixes = Object.values(Config.options.search.prefix);
++            if (q.length < 2 || prefixes.some(p => p.length > 0 && q.startsWith(p))) {
++                if (root.fileResults.length > 0)
++                    root.fileResults = [];
++                return;
++            }
++            fileProc.found = [];
++            fileProc.command = ["bash", "-c", 'fd -i -t d --max-depth 6 --max-results 40 -- "$1" "$HOME" | awk \'{print length, $0}\' | sort -n | cut -d" " -f2- | head -8 | sed "s|/$||; s|^|d |"', "_", q];
++            fileProc.running = true;
++        }
++        stdout: SplitParser {
++            onRead: data => fileProc.found.push(data)
++        }
++        onExited: {
++            // Only assign when changed: a new array rebuilds results, which restarts the search timer (flicker loop)
++            if (JSON.stringify(fileProc.found) !== JSON.stringify(root.fileResults))
++                root.fileResults = fileProc.found;
++        }
++    }
++
++    function fileResult(line) {
++        const isDir = line.startsWith("d ");
++        const path = line.slice(2);
++        const dirPath = isDir ? path : path.replace(/\/[^\/]*$/, "");
++        return resultComp.createObject(null, {
++            type: isDir ? Translation.tr("Folder") : Translation.tr("File"),
++            name: path.split("/").pop(),
++            comment: path.replace(Directories.home.replace("file://", ""), "~"),
++            iconName: isDir ? "folder" : "draft",
++            iconType: LauncherSearchResult.IconType.Material,
++            verb: Translation.tr("Open"),
++            execute: () => {
++                Quickshell.execDetached(isDir ? ["dolphin", path] : ["xdg-open", path]);
++            },
++            actions: [resultComp.createObject(null, {
++                    name: Translation.tr("Open in terminal"),
++                    iconName: "terminal",
++                    iconType: LauncherSearchResult.IconType.Material,
++                    execute: () => {
++                        Quickshell.execDetached(["bash", "-c", `cd "$1" && exec ${Config.options.apps.terminal}`, "_", dirPath]);
++                    }
++                })].concat(isDir ? [] : [resultComp.createObject(null, {
++                    name: Translation.tr("Show in folder"),
++                    iconName: "folder_open",
++                    iconType: LauncherSearchResult.IconType.Material,
++                    execute: () => {
++                        Quickshell.execDetached(["dolphin", "--select", path]);
++                    }
++                })])
++        });
++    }
++
+     Process {
+         id: mathProc
+         property list<string> baseCommand: ["qalc", "-t"]
+@@ -164,11 +225,51 @@
          }
      }
  
@@ -296,7 +358,7 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
  
          ///////////// Special cases ///////////////
          if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
-@@ -239,42 +279,7 @@
+@@ -239,42 +340,7 @@
                  Quickshell.clipboardText = root.mathResult;
              }
          });
@@ -340,3 +402,26 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
          const commandResultObject = resultComp.createObject(null, {
              name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
              verb: Translation.tr("Run"),
+@@ -343,16 +409,17 @@
+         ////////// Launcher actions ////////////
+         result = result.concat(launcherActionObjects);
+ 
+-        /// Math result, command, web search ///
++        /// Web search, then command (math only for numbers / math prefix) ///
+         if (Config.options.search.prefix.showDefaultActionsWithoutPrefix) {
+-            if (!startsWithShellCommandPrefix)
+-                result.push(commandResultObject);
+-            if (!startsWithNumber && !startsWithMathPrefix)
+-                result.push(mathResultObject);
+             if (!startsWithWebSearchPrefix)
+                 result.push(webSearchResultObject);
++            if (!startsWithShellCommandPrefix)
++                result.push(commandResultObject);
+         }
+ 
++        ////////////// Files & folders ///////////////
++        result = result.concat(root.fileResults.map(line => root.fileResult(line)));
++
+         return result;
+     }
+ 

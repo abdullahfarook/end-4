@@ -144,8 +144,8 @@ Item { // Wrapper
                 id: searchBar
                 property real verticalPadding: 4
                 Layout.fillWidth: true
-                Layout.leftMargin: 10
-                Layout.rightMargin: 4
+                Layout.leftMargin: 6
+                Layout.rightMargin: 0
                 Layout.topMargin: verticalPadding
                 Layout.bottomMargin: verticalPadding
                 Synchronizer on searchingText {
@@ -174,7 +174,7 @@ Item { // Wrapper
                 id: pinnedRow
                 anchors.fill: parent
                 spacing: 2
-                property bool editMode: false
+                property bool editMode: searchBar.pinEditMode
                 property var pinnedEntries: Config.options.launcher.pinnedApps
                     .map(id => AppSearch.list.find(app => app.id.toLowerCase() === id.toLowerCase()) ?? LauncherApps.entryForClass(id))
                     .filter(Boolean)
@@ -246,26 +246,6 @@ Item { // Wrapper
                                 color: Appearance.colors.colOnSurfaceVariant
                             }
                         }
-                    }
-                }
-
-                RippleButton { // Edit / done
-                    implicitWidth: 36
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.small
-                    toggled: pinnedRow.editMode
-                    colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                    onClicked: pinnedRow.editMode = !pinnedRow.editMode
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        text: pinnedRow.editMode ? "check" : "edit"
-                        iconSize: 20
-                        color: pinnedRow.editMode ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
-                    }
-                    StyledToolTip {
-                        text: pinnedRow.editMode ? Translation.tr("Done") : Translation.tr("Edit pinned apps")
                     }
                 }
             }

@@ -146,7 +146,68 @@ Singleton {
                 expr = expr.slice(Config.options.search.prefix.math.length);
             }
             mathProc.calculateExpression(expr);
+            fileProc.search(root.query);
         }
+    }
+
+    // Folders under $HOME, found with fd (live search; shortest paths first)
+    property var fileResults: []
+    Process {
+        id: fileProc
+        property var found: []
+        function search(text) {
+            fileProc.running = false;
+            const q = text.trim();
+            const prefixes = Object.values(Config.options.search.prefix);
+            if (q.length < 2 || prefixes.some(p => p.length > 0 && q.startsWith(p))) {
+                if (root.fileResults.length > 0)
+                    root.fileResults = [];
+                return;
+            }
+            fileProc.found = [];
+            fileProc.command = ["bash", "-c", 'fd -i -t d --max-depth 6 --max-results 40 -- "$1" "$HOME" | awk \'{print length, $0}\' | sort -n | cut -d" " -f2- | head -8 | sed "s|/$||; s|^|d |"', "_", q];
+            fileProc.running = true;
+        }
+        stdout: SplitParser {
+            onRead: data => fileProc.found.push(data)
+        }
+        onExited: {
+            // Only assign when changed: a new array rebuilds results, which restarts the search timer (flicker loop)
+            if (JSON.stringify(fileProc.found) !== JSON.stringify(root.fileResults))
+                root.fileResults = fileProc.found;
+        }
+    }
+
+    function fileResult(line) {
+        const isDir = line.startsWith("d ");
+        const path = line.slice(2);
+        const dirPath = isDir ? path : path.replace(/\/[^\/]*$/, "");
+        return resultComp.createObject(null, {
+            type: isDir ? Translation.tr("Folder") : Translation.tr("File"),
+            name: path.split("/").pop(),
+            comment: path.replace(Directories.home.replace("file://", ""), "~"),
+            iconName: isDir ? "folder" : "draft",
+            iconType: LauncherSearchResult.IconType.Material,
+            verb: Translation.tr("Open"),
+            execute: () => {
+                Quickshell.execDetached(isDir ? ["dolphin", path] : ["xdg-open", path]);
+            },
+            actions: [resultComp.createObject(null, {
+                    name: Translation.tr("Open in terminal"),
+                    iconName: "terminal",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.execDetached(["bash", "-c", `cd "$1" && exec ${Config.options.apps.terminal}`, "_", dirPath]);
+                    }
+                })].concat(isDir ? [] : [resultComp.createObject(null, {
+                    name: Translation.tr("Show in folder"),
+                    iconName: "folder_open",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.execDetached(["dolphin", "--select", path]);
+                    }
+                })])
+        });
     }
 
     Process {
@@ -348,15 +409,16 @@ Singleton {
         ////////// Launcher actions ////////////
         result = result.concat(launcherActionObjects);
 
-        /// Math result, command, web search ///
+        /// Web search, then command (math only for numbers / math prefix) ///
         if (Config.options.search.prefix.showDefaultActionsWithoutPrefix) {
-            if (!startsWithShellCommandPrefix)
-                result.push(commandResultObject);
-            if (!startsWithNumber && !startsWithMathPrefix)
-                result.push(mathResultObject);
             if (!startsWithWebSearchPrefix)
                 result.push(webSearchResultObject);
+            if (!startsWithShellCommandPrefix)
+                result.push(commandResultObject);
         }
+
+        ////////////// Files & folders ///////////////
+        result = result.concat(root.fileResults.map(line => root.fileResult(line)));
 
         return result;
     }
