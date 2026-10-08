@@ -3,8 +3,11 @@
 # First use moves the window there; if Teams is not running it is started. Only one side panel at a time (AI / Git panels are hidden first).
 W=480; LEFT=6; TOP=46                     # panel width, offsets from the monitor's top-left (same spot as the Git panel)
 dock=0; [ "${1:-}" = dock ] && dock=1       # "dock": at login, park the window on the (hidden) special workspace without showing it
-[ $dock = 1 ] || date +%s%3N > "${XDG_RUNTIME_DIR:-/tmp}/teams-panel-toggled"   # lets click-away ignore the click that caused this toggle
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/teams-panel.lock"; flock 9
+# Clicking the button while the panel is open: click-away may hide it first (the click is outside the panel); this toggle must then not reopen it
+h="${XDG_RUNTIME_DIR:-/tmp}/teams-panel-hidden"
+[ $dock = 1 ] || { [ -e "$h" ] && [ $(( $(date +%s%3N) - $(cat "$h") )) -lt 1000 ] && exit 0; }
+[ $dock = 1 ] || date +%s%3N > "${XDG_RUNTIME_DIR:-/tmp}/teams-panel-toggled"   # lets click-away ignore the click that caused this toggle
 shown() { hyprctl monitors -j | jq -e --arg n "special:$1" 'any(.[]; .specialWorkspace.name==$n)' >/dev/null; }
 [ $dock = 1 ] || for p in ai vgit; do shown "$p" && hyprctl dispatch "hl.dsp.workspace.toggle_special(\"$p\")" >/dev/null; done
 win() { hyprctl clients -j | jq -r '[.[]|select(.class=="teams-for-linux" and (.title|test("Microsoft Teams")))]|sort_by(-(.size[0]*.size[1]))|.[0]|"\(.address) \(.workspace.name)"' ; }

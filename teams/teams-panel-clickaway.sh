@@ -8,5 +8,6 @@ read -r cx cy < <(hyprctl cursorpos | tr -d ',')
 read -r x y w h < <(hyprctl clients -j | jq -r '.[]|select(.workspace.name=="special:teams")|"\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -1)
 [ -n "${x:-}" ] || exit 0
 if [ "$cx" -lt "$x" ] || [ "$cx" -gt $((x + w)) ] || [ "$cy" -lt "$y" ] || [ "$cy" -gt $((y + h)) ]; then
+    date +%s%3N > "${XDG_RUNTIME_DIR:-/tmp}/teams-panel-hidden"
     "$HOME/.config/hypr/custom/teams-panel-hide.sh"
 fi
