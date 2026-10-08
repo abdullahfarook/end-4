@@ -36,7 +36,7 @@ Rectangle {
             spacing: 4
             StyledText {
                 Layout.fillWidth: true
-                text: detail.thread ? (detail.thread.subject || qsTr("(no subject)")) : qsTr("Loading…")
+                text: detail.thread ? (detail.thread.subject || qsTr("(no subject)")) : ""
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.font.pixelSize.large
                 color: Appearance.colors.colOnLayer1
@@ -66,17 +66,17 @@ Rectangle {
 
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border }
 
-        StyledText {
-            visible: !detail.thread
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 40
-            text: qsTr("Loading…")
-            color: Appearance.colors.colSubtext
+        Item {  // loading state: spinner until the thread and its original HTML are both ready
+            visible: !detail.thread || !detail.store.htmlReady
+            Layout.fillWidth: true; Layout.fillHeight: true
+            StyledIndeterminateProgressBar {  // sliding bar right under the header
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+            }
         }
 
         ListView {
             id: messages
-            visible: !!detail.thread
+            visible: !!detail.thread && detail.store.htmlReady
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true

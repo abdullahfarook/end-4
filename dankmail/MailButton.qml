@@ -35,6 +35,7 @@ RippleButton {
     property int _threadReqId: -1
     property int _htmlReqId: -1
     property bool _htmlForViewer: false
+    property bool htmlReady: false         // the original-HTML fetch for the open thread finished (or timed out); the detail panel waits for it so it renders once
     property var rawHtml: ({})             // local message id -> original HTML of the newest received message of the open thread
     // HTML viewer (viewer/mailview.qml): one reused window; the widget writes the message HTML + a pointer file it polls
     readonly property string viewerDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/dankmail-view"
@@ -123,6 +124,8 @@ RippleButton {
         _threadReqId = call("threads.get", { "id": id });
         call("threads.previewOpened", { "id": id });
         rawHtml = ({});
+        htmlReady = false;
+        htmlGuard.restart();
         fetchHtml(id, false);
     }
     // Fetch the original HTML of the thread's newest received message: rendered in place by the detail panel,
@@ -180,9 +183,10 @@ RippleButton {
         }
         if (msg.id === _htmlReqId) {
             _htmlReqId = -1;
-            if (msg.result) {
-                if (_htmlForViewer) showInViewer(msg.result);
-                else if (msg.result.html) { const r = {}; r[msg.result.messageId] = msg.result.html; rawHtml = r; }
+            if (msg.result && _htmlForViewer) showInViewer(msg.result);
+            else if (!_htmlForViewer) {
+                if (msg.result && msg.result.html) { const r = {}; r[msg.result.messageId] = msg.result.html; rawHtml = r; }
+                htmlReady = true; htmlGuard.stop();
             }
             return;
         }
@@ -296,6 +300,7 @@ RippleButton {
     Timer { id: refreshDebounce; interval: 300; onTriggered: root.refresh() }
     Timer { id: subRetry; interval: 4000; onTriggered: if (cmdSocket.connected) subSocket.connected = true }
     Timer { id: olderGuard; interval: 120000; onTriggered: { root.loadingMore = false; root._olderReqId = -1; } }
+    Timer { id: htmlGuard; interval: 5000; onTriggered: root.htmlReady = true }   // slow or failed fetch: show the text version
     Timer { id: syncGuard; interval: 20000; onTriggered: root.syncing = false }
     // Reconnect while the daemon is down, and a slow safety poll while it is up
     Timer { id: retryTimer; interval: 5000; repeat: true; onTriggered: { cmdSocket.connected = false; cmdSocket.connected = true; } }
