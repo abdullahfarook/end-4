@@ -3,6 +3,8 @@
 # (focus watcher, click-away) can't both toggle it (which would close and reopen it).
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar.lock"
 flock 9
+# The screen-snip overlay is up: its clicks (selecting the region) must not close the panel, which would eat the first click
+hyprctl layers -j | jq -e '[.. | objects | select(.namespace? == "quickshell:regionSelector")] | length > 0' >/dev/null && exit 0
 # The panel was toggled moments ago (the click/focus that opened it also triggers click-away): leave it alone
 t="${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar-toggled"
 [ -e "$t" ] && [ $(( $(date +%s%3N) - $(cat "$t") )) -lt 800 ] && exit 0
