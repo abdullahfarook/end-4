@@ -15,7 +15,6 @@ RippleButton {
     property int unread: 0
     property bool dnd: false
     property var threads: []
-    property var sentReplies: ({})         // threadId -> replies sent from the panel (the Sent folder is not synced, so they never come back)
     property string view: "inbox"          // inbox | unread | starred | spam
     property bool syncing: false
     property string requestError: ""

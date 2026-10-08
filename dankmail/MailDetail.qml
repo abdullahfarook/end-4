@@ -16,7 +16,6 @@ Rectangle {
     readonly property var thread: store.currentThread
     property bool replying: false
     property bool replyAll: false
-    readonly property var sentReplies: thread ? (store.sentReplies[thread.id] || []) : []  // replies sent from this panel
     property var _threadId: null
     onThreadChanged: {  // the store swaps the thread object on every refresh: reset only when another thread opens
         const id = thread ? thread.id : null;
@@ -32,6 +31,12 @@ Rectangle {
     border.color: Appearance.colors.colLayer0Border
     clip: true
 
+    function sendReply() {
+        if (!thread || replyBox.text.trim() === "") return;
+        store.call("ops.reply", { "id": thread.id, "body": replyBox.text, "replyAll": replyAll });
+        replyBox.text = "";
+        replying = false;
+    }
     function senderName(raw) {
         const m = String(raw || "").match(/^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/);
         return m && m[1].trim() !== "" ? m[1].trim() : String(raw || "");
@@ -96,40 +101,6 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
             model: detail.thread ? detail.thread.messages : []
             ScrollBar.vertical: StyledScrollBar {}
-            footer: Column {  // replies you just sent
-                width: messages.width
-                Repeater {
-                    model: detail.sentReplies
-                    delegate: Column {
-                        required property var modelData
-                        width: messages.width
-                        Rectangle { width: parent.width; height: 1; color: Appearance.colors.colLayer0Border; opacity: 0.5 }
-                        Item {
-                            width: parent.width
-                            implicitHeight: sentCol.implicitHeight + 28
-                            height: implicitHeight
-                            ColumnLayout {
-                                id: sentCol
-                                x: 14; y: 14
-                                width: parent.width - 28
-                                spacing: 4
-                                StyledText {
-                                    text: qsTr("You") + " · " + modelData.time + (modelData.all ? " · " + qsTr("reply all") : "")
-                                    font.weight: Font.Bold
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: Appearance.colors.colPrimary
-                                }
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: modelData.body
-                                    wrapMode: Text.Wrap
-                                    color: Appearance.colors.colOnLayer1
-                                }
-                            }
-                        }
-                    }
-                }
-            }
             delegate: ColumnLayout {
                 id: msg
                 required property var modelData
@@ -214,8 +185,16 @@ Rectangle {
                 id: replyBox
                 Layout.fillWidth: true
                 Layout.preferredHeight: 110
-                placeholderText: qsTr("Reply…")
+                placeholderText: qsTr("Write a reply…  Enter to send · Shift+Enter for a new line")
+                placeholderTextColor: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.small
                 wrapMode: TextEdit.Wrap
+                Keys.onPressed: event => {
+                    if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
+                        detail.sendReply();
+                        event.accepted = true;
+                    }
+                }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -228,15 +207,7 @@ Rectangle {
                     enabled: replyBox.text.trim() !== ""
                     colBackground: enabled ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
                     colBackgroundHover: enabled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2
-                    onClicked: {
-                        detail.store.call("ops.reply", { "id": detail.thread.id, "body": replyBox.text, "replyAll": detail.replyAll });
-                        const all = Object.assign({}, detail.store.sentReplies);
-                        all[detail.thread.id] = detail.sentReplies.concat([{ "body": replyBox.text.trim(), "all": detail.replyAll, "time": Qt.formatTime(new Date(), "HH:mm") }]);
-                        detail.store.sentReplies = all;
-                        replyBox.text = "";
-                        detail.replying = false;
-                        Qt.callLater(() => messages.positionViewAtEnd());
-                    }
+                    onClicked: detail.sendReply()
                     StyledText { anchors.centerIn: parent; text: qsTr("Send"); color: parent.enabled ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext }
                 }
             }
