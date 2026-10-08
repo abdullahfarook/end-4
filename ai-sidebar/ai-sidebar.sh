@@ -27,6 +27,7 @@ if [ -n "$win" ]; then
             [ "$visible" = true ] && exit 0  # it was on screen: moving it away is the hide
         fi
         hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")' >/dev/null  # show
+        sleep 0.1; hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null  # make sure typing goes to it
     fi
 else
     # Resume the last conversation (survives restart/logout); start a new one if there is none

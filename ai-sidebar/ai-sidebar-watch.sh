@@ -3,14 +3,31 @@
 # or when the shell's launcher/overview opens (SUPER).
 # Started by ai-sidebar.sh; exits with the Hyprland session.
 exec 9>"$XDG_RUNTIME_DIR/ai-sidebar-watch.lock"; flock -n 9 || exit 0  # single instance
+# Most recently focused window that isn't the AI panel
+refocus() {
+    local a
+    a=$(hyprctl clients -j | jq -r '[.[]|select(.class!="ai-sidebar" and .mapped and .workspace.id>0)]|sort_by(.focusHistoryID)|.[0].address // empty')
+    [ -n "$a" ] && hyprctl dispatch "hl.dsp.focus({ window = \"address:$a\" })" >/dev/null
+}
 sock="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
 socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     case "$line" in
-    openlayer\>\>quickshell:overview) "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"; continue ;;  # SUPER launcher/overview opened: close the panel
-    closelayer\>\>quickshell:popup-dismiss) popup_closed=$(date +%s%3N); continue ;;  # a bar popup (mail) closed: Hyprland may refocus the AI window and reveal its panel
-    activespecial\>\>special:ai,*)
-        [ -n "${popup_closed:-}" ] && [ $(( $(date +%s%3N) - popup_closed )) -lt 400 ] && "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
-        popup_closed=; continue ;;
+    openlayer\>\>quickshell:overview)
+        "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
+        # Park focus on a real window so closing the overview doesn't refocus (and reveal) the hidden AI window
+        [ "$(hyprctl activewindow -j | jq -r '.class // empty')" = ai-sidebar ] && refocus
+        continue ;;  # SUPER launcher/overview opened: close the panel
+    closelayer\>\>quickshell:popup-dismiss) continue ;;  # a bar popup (mail) closed: Hyprland may refocus the AI window and reveal its panel
+    closelayer\>\>quickshell:overview)  # SUPER overview closed: Hyprland refocuses the hidden AI window (panel pops up / keystrokes vanish): hide it and give focus back
+        sleep 0.15
+        [ "$(hyprctl activewindow -j | jq -r '.class // empty')" = ai-sidebar ] || continue
+        "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
+        refocus
+        continue ;;
+    activespecial\>\>special:ai,*)  # panel shown without a toggle from us (focus fell back onto it, e.g. after a popup/overview closed): undo it
+        t=$(cat "$XDG_RUNTIME_DIR/ai-sidebar-toggled" 2>/dev/null || echo 0)
+        [ $(( $(date +%s%3N) - t )) -lt 1500 ] && continue
+        sleep 0.03; "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"; refocus; continue ;;
     openwindow\>\>*)  # a window mapped while the panel is shown (e.g. Teams from the tray) lands on special:ai: close the panel and move it out
         IFS=, read -r addr ws class _ <<<"${line#openwindow>>}"
         [ "$ws" = special:ai ] && [ "$class" != ai-sidebar ] || continue
