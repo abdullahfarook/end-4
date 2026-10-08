@@ -59,7 +59,7 @@ ShellRoot {
             anchors { top: true; left: true }
             property bool open: false
             // short close delay so brief hover drops never flicker the drawer
-            Timer { id: closeDelay; interval: 250; onTriggered: win.open = false }
+            Timer { id: closeDelay; interval: 700; onTriggered: win.open = false }
             readonly property int sw: 108   // fixed surface size: never resizes, so hover can't flicker
             readonly property int sh: 38
             margins {
