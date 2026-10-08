@@ -1,0 +1,119 @@
+diff -u -r a/modules/ii/bar/ResourcesPopup.qml b/modules/ii/bar/ResourcesPopup.qml
+--- a/modules/ii/bar/ResourcesPopup.qml
++++ b/modules/ii/bar/ResourcesPopup.qml
+@@ -84,6 +84,39 @@
+         }
+ 
+         ColumnLayout {
++            Layout.alignment: Qt.AlignTop
++            Layout.fillWidth: true
++            spacing: 8
++
++            StyledPopupHeaderRow {
++                icon: "hard_drive"
++                label: "Disk"
++            }
++            ColumnLayout {
++                Layout.fillWidth: true
++                spacing: 4
++                StyledPopupValueRow {
++                    Layout.fillWidth: true
++                    icon: "clock_loader_60"
++                    label: Translation.tr("Used:")
++                    value: `${Math.round(ResourceUsage.diskUsedGB)} GB`
++                }
++                StyledPopupValueRow {
++                    Layout.fillWidth: true
++                    icon: "check_circle"
++                    label: Translation.tr("Free:")
++                    value: `${Math.round(ResourceUsage.diskFreeGB)} GB`
++                }
++                StyledPopupValueRow {
++                    Layout.fillWidth: true
++                    icon: "empty_dashboard"
++                    label: Translation.tr("Total:")
++                    value: `${Math.round(ResourceUsage.diskTotalGB)} GB`
++                }
++            }
++        }
++
++        ColumnLayout {
+             visible: ResourceUsage.gpuAvailable
+             Layout.alignment: Qt.AlignTop
+             Layout.fillWidth: true
+diff -u -r a/modules/ii/bar/Resources.qml b/modules/ii/bar/Resources.qml
+--- a/modules/ii/bar/Resources.qml
++++ b/modules/ii/bar/Resources.qml
+@@ -36,6 +36,13 @@
+         }
+ 
+         Resource {
++            iconName: "hard_drive"
++            percentage: ResourceUsage.diskUsedPercentage
++            Layout.leftMargin: 6
++            warningThreshold: 90
++        }
++
++        Resource {
+             iconName: "developer_board"
+             percentage: ResourceUsage.gpuUsage
+             shown: ResourceUsage.gpuAvailable
+diff -u -r a/services/ResourceUsage.qml b/services/ResourceUsage.qml
+--- a/services/ResourceUsage.qml
++++ b/services/ResourceUsage.qml
+@@ -37,6 +37,10 @@
+     property real gpuMemClockMHz: 0
+     property real gpuTempC: 0
+     property real gpuPowerW: 0
++    property real diskTotalGB: 0 // root filesystem
++    property real diskUsedGB: 0
++    property real diskFreeGB: 0
++    property real diskUsedPercentage: diskTotalGB > 0 ? diskUsedGB / diskTotalGB : 0
+ 
+     readonly property int historyLength: Config?.options.resources.historyLength ?? 60
+     property list<real> cpuUsageHistory: []
+@@ -157,6 +161,26 @@
+             }
+         }
+     }
++
++    Timer {
++        interval: 30000
++        running: true
++        repeat: true
++        triggeredOnStart: true
++        onTriggered: diskInfoProc.running = true
++    }
++    Process {
++        id: diskInfoProc
++        command: ["bash", "-c", "df -B1 --output=size,used,avail / | tail -1"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const [size, used, avail] = text.trim().split(/\s+/).map(Number);
++                root.diskTotalGB = (size || 0) / 1e9;
++                root.diskUsedGB = (used || 0) / 1e9;
++                root.diskFreeGB = (avail || 0) / 1e9;
++            }
++        }
++    }
+ 
+     Process {
+         id: findCpuMaxFreqProc
+--- a/modules/ii/bar/BarContent.qml
++++ b/modules/ii/bar/BarContent.qml
+@@ -125,11 +125,14 @@
+             horizontalCenter: parent.horizontalCenter
+         }
+         spacing: 4
++        // the disk icon widens the left group to the left, keeping the workspaces centered
++        readonly property int diskExtra: root.useShortenedForm < 2 ? 46 : 0
++        anchors.horizontalCenterOffset: -diskExtra / 2
+ 
+         BarGroup {
+             id: leftCenterGroup
+             anchors.verticalCenter: parent.verticalCenter
+-            implicitWidth: root.centerSideModuleWidth
++            implicitWidth: root.centerSideModuleWidth + middleSection.diskExtra
+ 
+             Resources {
+                 alwaysShowAllResources: root.useShortenedForm === 2
