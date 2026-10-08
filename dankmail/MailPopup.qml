@@ -127,15 +127,8 @@ LazyLoader {
                     Layout.fillWidth: true
                     Layout.margins: 12
                     spacing: 8
-                    MaterialSymbol { text: "mail"; iconSize: 22; color: Appearance.colors.colOnLayer1 }
-                    StyledText {
-                        text: "Dank Mail"
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        color: Appearance.colors.colOnLayer1
-                    }
-                    Item { Layout.fillWidth: true }
                     Repeater {
-                        model: [{ "k": "inbox", "t": "All" }, { "k": "unread", "t": "Unread" }, { "k": "starred", "t": "Starred" }]
+                        model: [{ "k": "inbox", "t": "All" }, { "k": "unread", "t": "Unread" }, { "k": "starred", "t": "Starred" }, { "k": "spam", "t": "Spam" }]
                         delegate: RippleButton {
                             required property var modelData
                             implicitHeight: 28
@@ -152,6 +145,7 @@ LazyLoader {
                             }
                         }
                     }
+                    Item { Layout.fillWidth: true }
                     RippleButton {
                         implicitWidth: 28; implicitHeight: 28; buttonRadius: 14
                         onClicked: root.store.syncNow()
@@ -245,6 +239,7 @@ LazyLoader {
                         visible: root.store.threads.length === 0
                         text: root.store.requestError !== "" ? root.store.requestError
                             : root.store.view === "starred" ? "No starred mail."
+                            : root.store.view === "spam" ? "No spam."
                             : root.store.view === "unread" ? "No unread mail." : "No mail in the inbox."
                         color: Appearance.colors.colSubtext
                     }

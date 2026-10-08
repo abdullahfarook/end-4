@@ -15,7 +15,7 @@ RippleButton {
     property int unread: 0
     property bool dnd: false
     property var threads: []
-    property string view: "inbox"          // inbox | unread | starred
+    property string view: "inbox"          // inbox | unread | starred | spam
     property bool syncing: false
     property string requestError: ""
     property bool popupOpen: false
@@ -93,13 +93,14 @@ RippleButton {
         _statusReqId = call("system.status", {});
         _accountsReqId = call("accounts.list", {});
         if (selectedId >= 0) _threadReqId = call("threads.get", { "id": selectedId });
-        _threadsReqId = call("threads.list", { "inbox": view !== "starred", "starred": view === "starred", "unread": view === "unread", "limit": limit, "account": accountFilter });
+        _threadsReqId = call("threads.list", view === "spam" ? { "inbox": false, "label": "SPAM", "limit": limit, "account": accountFilter }
+            : { "inbox": view !== "starred", "starred": view === "starred", "unread": view === "unread", "limit": limit, "account": accountFilter });
     }
     // Scrolled to the bottom: first reveal more of the local cache, then pull an older month from the server.
     function loadMore() {
         if (!cmdSocket.connected || loadingMore) return;
         if (!localExhausted) { loadingMore = true; limit += pageSize; refresh(); return; }
-        if (olderDone || view === "starred") return;
+        if (olderDone || view === "starred" || view === "spam") return;
         loadingMore = true;
         _olderReqId = call("threads.fetchOlder", olderNext ? { "next": olderNext } : {});
         olderGuard.restart();
