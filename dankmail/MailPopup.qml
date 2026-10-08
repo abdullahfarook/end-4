@@ -40,7 +40,7 @@ LazyLoader {
         anchors.left: true
         anchors.top: true
         readonly property bool detailOpen: root.store.selectedId >= 0
-        readonly property int contentHeight: root.popupHeight > 0 ? root.popupHeight : Math.max(Math.min(750, panel.implicitHeight), detailOpen ? 560 : 0)
+        readonly property int contentHeight: root.popupHeight > 0 ? root.popupHeight : Math.max(Math.min(790, panel.implicitHeight), detailOpen ? 560 : 0)
         implicitWidth: 440 + (detailOpen ? 8 + root.detailWidth : 0) + Appearance.sizes.elevationMargin * 2
         implicitHeight: contentHeight + Appearance.sizes.elevationMargin * 2
         mask: Region { item: wrap }
@@ -234,7 +234,7 @@ LazyLoader {
                     id: listArea
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    implicitHeight: root.store.threads.length > 0 ? Math.min(630, root.store.threads.length * 78) : 120
+                    implicitHeight: root.store.threads.length > 0 ? Math.min(670, root.store.threads.length * 78) : 120
 
                     StyledText {
                         anchors.centerIn: parent
