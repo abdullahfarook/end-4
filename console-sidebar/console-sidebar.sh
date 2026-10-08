@@ -5,14 +5,15 @@
 #   console-sidebar.sh clickaway hide if the click landed outside the panel
 #   console-sidebar.sh stop     kill the terminal (next toggle starts a fresh one)
 #   console-sidebar.sh watch    hide when focus moves to another window (single instance)
+stamp="${XDG_RUNTIME_DIR:-/tmp}/console-sidebar-toggled"
+[ "${1:-toggle}" = toggle ] && date +%s%3N > "$stamp"  # before anything slow: lets click-away ignore the click that caused this toggle
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/console-sidebar.lock"
 shown() { hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:console")' >/dev/null; }
-stamp="${XDG_RUNTIME_DIR:-/tmp}/console-sidebar-toggled"
 case "${1:-toggle}" in
 hide)
     flock 9; shown && hyprctl dispatch 'hl.dsp.workspace.toggle_special("console")' >/dev/null; exit 0 ;;
 clickaway)
-    sleep 0.08
+    sleep 0.2
     [ -e "$stamp" ] && [ $(( $(date +%s%3N) - $(cat "$stamp") )) -lt 1000 ] && exit 0
     read -r x y w h < <(hyprctl clients -j | jq -r '.[] | select(.class=="console-sidebar" and .workspace.name=="special:console") | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -1)
     [ -n "${x:-}" ] && shown || exit 0
@@ -34,7 +35,6 @@ watch)
     done ;;
 toggle)
     flock 9
-    date +%s%3N > "$stamp"
     nohup "$0" watch >/dev/null 2>&1 9>&- &
     win=$(hyprctl clients -j | jq -c '[.[] | select(.class=="console-sidebar")][0] // empty')
     if [ -n "$win" ]; then
