@@ -108,7 +108,7 @@ ShellRoot {
                     visible: win.open
                     Repeater {
                         model: [
-                            { kind: "min", cmd: "hl.dsp.window.move({ workspace = 'special:minimized', window = '%A' })" },
+                            { kind: "drag", cmd: "hl.dsp.window.drag()" },
                             { kind: "max", cmd: "hl.dsp.window.fullscreen({ mode = 1, window = '%A' })" },
                             { kind: "close", cmd: "hl.dsp.window.close({ window = '%A' })" }
                         ]
@@ -128,7 +128,8 @@ ShellRoot {
                                     strokeColor: "#e8e8ee"; strokeWidth: 1.6; fillColor: "transparent"
                                     capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
                                     PathPolyline {
-                                        path: btn.modelData.kind === "min" ? [Qt.point(3, 6), Qt.point(8, 11), Qt.point(13, 6)]
+                                        path: btn.modelData.kind === "drag" ? []
+                                            : btn.modelData.kind === "min" ? [Qt.point(3, 6), Qt.point(8, 11), Qt.point(13, 6)]
                                             : btn.modelData.kind === "max" ? [Qt.point(8, 2), Qt.point(14, 8), Qt.point(8, 14), Qt.point(2, 8), Qt.point(8, 2)]
                                             : [Qt.point(3, 3), Qt.point(13, 13)]
                                     }
@@ -139,9 +140,27 @@ ShellRoot {
                                     PathPolyline { path: [Qt.point(13, 3), Qt.point(3, 13)] }
                                 }
                             }
+                            // drag: standard 2x3 grip-dot handle
+                            Grid {
+                                visible: btn.modelData.kind === "drag"
+                                anchors.centerIn: parent; columns: 2; spacing: 2
+                                Repeater { model: 6; Rectangle { width: 2; height: 2; radius: 1; color: "#e8e8ee" } }
+                            }
                             MouseArea {
                                 id: ma; anchors.fill: parent; hoverEnabled: true
-                                onClicked: act.run(win.modelData.address, btn.modelData.cmd)
+                                // double-click: ydotool holds the left button down so the drag follows the cursor; the next real click drops it
+                                onDoubleClicked: if (btn.modelData.kind === "drag") {
+                                    act.command = ["sh", "-c", "sleep 0.15; ydotool click 0x40"]
+                                    act.running = true
+                                }
+                                onClicked: if (btn.modelData.kind !== "drag") act.run(win.modelData.address, btn.modelData.cmd)
+                                // hand: hovering focuses the window and arms the "handdrag" submap, so the press starts a real drag
+                                onContainsMouseChanged: if (btn.modelData.kind === "drag") {
+                                    act.command = ["sh", "-c", containsMouse
+                                        ? "hyprctl dispatch 'hl.dsp.focus({ window = \"address:" + win.modelData.address + "\" })'; hyprctl dispatch 'hl.dsp.submap(\"handdrag\")'"
+                                        : "hyprctl dispatch 'hl.dsp.submap(\"reset\")'"]
+                                    act.running = true
+                                }
                             }
                         }
                     }
