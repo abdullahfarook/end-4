@@ -63,13 +63,35 @@ index 36e8cf0..e4a2fa0 100644
  	// threads.previewOpened drives the mark-read-on-preview hook.
  	srv.Register("threads.previewOpened", func(ctx context.Context, p map[string]any) (any, error) {
  		if !d.settings.Get().MarkReadOnPreview {
-diff --git a/core/internal/provider/gmail/gmail.go b/core/internal/provider/gmail/gmail.go
-index f3ea0aa..af635c5 100644
---- a/core/internal/provider/gmail/gmail.go
-+++ b/core/internal/provider/gmail/gmail.go
-@@ -584,3 +584,18 @@ func (p *Provider) historyPage(ctx context.Context, query, pageToken string) (pr
+diff --git a/core/internal/provider/gmail/realapi.go b/core/internal/provider/gmail/realapi.go
+index ee25632..10a997d 100644
+--- a/core/internal/provider/gmail/realapi.go
++++ b/core/internal/provider/gmail/realapi.go
+@@ -3,9 +3,12 @@ package gmail
+ import (
+ 	"context"
+ 	"encoding/base64"
++	"fmt"
+ 	"net/http"
++	"time"
+ 
+ 	"github.com/arqueon/dankmail/core/errdefs"
++	"github.com/arqueon/dankmail/core/internal/provider"
+ 	gmailv1 "google.golang.org/api/gmail/v1"
+ 	"google.golang.org/api/option"
+ )
+@@ -48,7 +51,7 @@ func NewWithClient(accountID, email string, hc *http.Client, opts Options) (*Pro
+ }
+ 
+ func (r *realAPI) ListThreads(ctx context.Context, labelIDs []string, pageToken string) ([]string, string, error) {
+-	call := r.svc.Users.Threads.List(userID).Context(ctx)
++	call := r.svc.Users.Threads.List(userID).Q("newer_than:7d").Context(ctx)
+ 	if len(labelIDs) > 0 {
+ 		call = call.LabelIds(labelIDs...)
  	}
- 	return changes, encodeArchiveCursor(archiveCursor{Account: p.accountID, Query: query, Page: next}), nil
+@@ -141,3 +144,76 @@ func (r *realAPI) GetProfile(ctx context.Context) (string, uint64, error) {
+ 	}
+ 	return p.EmailAddress, p.HistoryId, nil
  }
 +
 +// MessageHTML returns the original text/html part of one message ("" when
@@ -86,21 +108,66 @@ index f3ea0aa..af635c5 100644
 +	}
 +	return "", nil
 +}
-diff --git a/core/internal/provider/gmail/realapi.go b/core/internal/provider/gmail/realapi.go
-index ee25632..468ab1a 100644
---- a/core/internal/provider/gmail/realapi.go
-+++ b/core/internal/provider/gmail/realapi.go
-@@ -48,7 +48,7 @@ func NewWithClient(accountID, email string, hc *http.Client, opts Options) (*Pro
- }
- 
- func (r *realAPI) ListThreads(ctx context.Context, labelIDs []string, pageToken string) ([]string, string, error) {
--	call := r.svc.Users.Threads.List(userID).Context(ctx)
-+	call := r.svc.Users.Threads.List(userID).Q("newer_than:30d").Context(ctx)
- 	if len(labelIDs) > 0 {
- 		call = call.LabelIds(labelIDs...)
- 	}
++
++const historyFloor = 2000
++
++// HistoryPage loads one older month of inbox mail (backfill, never notified),
++// like the Microsoft provider. The token is the exclusive upper bound (RFC3339)
++// of the window to load; "" starts just before the last 7 days (the initial
++// sync window). The returned token is the next window's upper bound, or ""
++// when the mailbox history is exhausted.
++func (p *Provider) HistoryPage(ctx context.Context, pageToken string) (provider.Changes, string, error) {
++	ctx = withRetryBudget(ctx)
++	to := time.Time{}
++	if pageToken == "" {
++		d := time.Now().UTC().AddDate(0, 0, -7)
++		to = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
++	} else {
++		var err error
++		if to, err = time.Parse(time.RFC3339, pageToken); err != nil {
++			return provider.Changes{}, pageToken, fmt.Errorf("invalid history cursor")
++		}
++	}
++	changes := provider.Changes{Backfill: true}
++	// Skip over empty months so one request always yields something (or reaches the floor).
++	for tries := 0; tries < 12 && to.Year() >= historyFloor; tries++ {
++		from := to.AddDate(0, -1, 0)
++		query := fmt.Sprintf("in:inbox after:%d before:%d", from.Unix(), to.Unix())
++		page := ""
++		for {
++			ids, next, err := p.api.SearchThreads(ctx, query, page, 100)
++			if err != nil {
++				return changes, to.Format(time.RFC3339), classify(err)
++			}
++			for _, id := range ids {
++				t, err := p.api.GetThread(ctx, id)
++				if err != nil {
++					if isNotFound(err) {
++						continue
++					}
++					return changes, to.Format(time.RFC3339), classify(err)
++				}
++				if d := p.threadDelta(t); d.MessageCount > 0 {
++					changes.Upserted = append(changes.Upserted, d)
++				}
++			}
++			if next == "" {
++				break
++			}
++			page = next
++		}
++		to = from
++		if len(changes.Upserted) > 0 {
++			break
++		}
++	}
++	if to.Year() < historyFloor {
++		return changes, "", nil
++	}
++	return changes, to.Format(time.RFC3339), nil
++}
 diff --git a/core/internal/provider/microsoft/client.go b/core/internal/provider/microsoft/client.go
-index 32c3a84..d97817a 100644
+index 32c3a84..77ac184 100644
 --- a/core/internal/provider/microsoft/client.go
 +++ b/core/internal/provider/microsoft/client.go
 @@ -114,6 +114,7 @@ func (w *wireMessage) toGraphMessage() *graphMessage {
@@ -124,7 +191,7 @@ index 32c3a84..d97817a 100644
  	resp, err := c.hc.Do(req)
  	if err != nil {
  		return err
-@@ -352,3 +357,10 @@ func htmlToText(html string) string {
+@@ -352,3 +357,20 @@ func htmlToText(html string) string {
  	}
  	return strings.TrimSpace(text)
  }
@@ -134,6 +201,16 @@ index 32c3a84..d97817a 100644
 +// withHTMLBody makes requests on ctx ask Graph for the html body instead of text.
 +func withHTMLBody(ctx context.Context) context.Context {
 +	return context.WithValue(ctx, htmlBodyKey{}, true)
++}
++
++// MessageHTML returns the raw html body of one message ("" when the body is
++// plain text). Fetched on demand, never stored.
++func (p *Provider) MessageHTML(ctx context.Context, _, messageID string) (string, error) {
++	m, err := p.api.GetMessage(withHTMLBody(ctx), messageID)
++	if err != nil {
++		return "", err
++	}
++	return m.BodyHTML, nil
 +}
 diff --git a/core/internal/provider/microsoft/graph.go b/core/internal/provider/microsoft/graph.go
 index b02e3a6..5d759d0 100644
@@ -147,24 +224,6 @@ index b02e3a6..5d759d0 100644
  	// Headers carries the reply-threading headers (References, Reply-To)
  	// from internetMessageHeaders, keyed by canonical name.
  	Headers     map[string]string
-diff --git a/core/internal/provider/microsoft/microsoft.go b/core/internal/provider/microsoft/microsoft.go
-index 850cf24..d201151 100644
---- a/core/internal/provider/microsoft/microsoft.go
-+++ b/core/internal/provider/microsoft/microsoft.go
-@@ -308,3 +308,13 @@ func (p *Provider) WebLink(threadID, messageID string) (string, bool) {
- 	}
- 	return "https://outlook.live.com/mail/", true
- }
-+
-+// MessageHTML returns the raw html body of one message ("" when the body is
-+// plain text). Fetched on demand, never stored.
-+func (p *Provider) MessageHTML(ctx context.Context, _, messageID string) (string, error) {
-+	m, err := p.api.GetMessage(withHTMLBody(ctx), messageID)
-+	if err != nil {
-+		return "", err
-+	}
-+	return m.BodyHTML, nil
-+}
 diff --git a/core/internal/provider/provider.go b/core/internal/provider/provider.go
 index 85da596..543a0cf 100644
 --- a/core/internal/provider/provider.go
