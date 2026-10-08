@@ -212,27 +212,22 @@ LazyLoader {
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     color: chip.fg
                                 }
-                                Rectangle {
-                                    visible: chip.modelData.unread > 0
-                                    implicitWidth: badge.implicitWidth + 10; implicitHeight: 16; radius: 8
-                                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.82)
-                                    StyledText {
-                                        id: badge
-                                        anchors.centerIn: parent
-                                        text: chip.modelData.unread
-                                        font.pixelSize: 10
-                                        color: Appearance.colors.colOnLayer1
-                                    }
+                            }
+                            Rectangle {  // count of mail that arrived since you last viewed this account; overlays the corner so chips keep their size
+                                visible: chip.modelData.unread > 0 && !chip.toggled
+                                anchors { top: parent.top; right: parent.right; topMargin: 0; rightMargin: 1 }
+                                implicitWidth: Math.max(16, badgeText.implicitWidth + 8); implicitHeight: 16; radius: 8
+                                color: Appearance.colors.colPrimary
+                                border.width: 2; border.color: Appearance.colors.colLayer1
+                                StyledText {
+                                    id: badgeText
+                                    anchors.centerIn: parent
+                                    text: chip.modelData.unread > 99 ? "99+" : chip.modelData.unread
+                                    font { pixelSize: 9; weight: Font.Bold }
+                                    color: Appearance.colors.colOnPrimary
                                 }
                             }
-                            Rectangle {  // new mail since you last viewed this account
-                                visible: chip.modelData.fresh && !chip.toggled
-                                anchors { top: parent.top; right: parent.right; topMargin: 3; rightMargin: 3 }
-                                implicitWidth: 9; implicitHeight: 9; radius: 5
-                                color: Appearance.colors.colPrimary
-                                border.width: 1.5; border.color: Appearance.colors.colLayer1
-                            }
-                            StyledToolTip { text: chip.modelData.email + (chip.modelData.fresh ? qsTr(" (new mail)") : "") }
+                            StyledToolTip { text: chip.modelData.email + (chip.modelData.unread > 0 ? qsTr(" (%1 new)").arg(chip.modelData.unread) : "") }
                         }
                     }
                 }
