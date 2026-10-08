@@ -26,6 +26,13 @@ RippleButton {
     property int _threadReqId: -1
     property var currentThread: null       // full thread (with messages) shown in the popup's detail panel
     property int selectedId: -1
+    property int pageSize: 25
+    property int limit: pageSize            // how many threads the list currently asks the local cache for
+    property bool localExhausted: false     // the cache returned fewer than `limit` threads
+    property bool olderDone: false          // the server has no older mail left to pull
+    property bool loadingMore: false        // spinner at the bottom of the list
+    property var olderNext: null            // opaque per-account cursor for threads.fetchOlder
+    property int _olderReqId: -1
 
     implicitWidth: icon.implicitWidth + buttonPadding * 2
     implicitHeight: icon.implicitHeight + buttonPadding * 2
@@ -50,7 +57,16 @@ RippleButton {
         if (!cmdSocket.connected) return;
         _statusReqId = call("system.status", {});
         if (selectedId >= 0) _threadReqId = call("threads.get", { "id": selectedId });
-        _threadsReqId = call("threads.list", { "inbox": view !== "starred", "starred": view === "starred", "limit": view === "unread" ? 60 : 25 });
+        _threadsReqId = call("threads.list", { "inbox": view !== "starred", "starred": view === "starred", "unread": view === "unread", "limit": limit });
+    }
+    // Scrolled to the bottom: first reveal more of the local cache, then pull an older month from the server.
+    function loadMore() {
+        if (!cmdSocket.connected || loadingMore) return;
+        if (!localExhausted) { loadingMore = true; limit += pageSize; refresh(); return; }
+        if (olderDone || view === "starred") return;
+        loadingMore = true;
+        _olderReqId = call("threads.fetchOlder", olderNext ? { "next": olderNext } : {});
+        olderGuard.restart();
     }
     function op(method, id) { call(method, { "ids": [id] }); }
     function syncNow() {
@@ -68,8 +84,17 @@ RippleButton {
         call("threads.previewOpened", { "id": id });
     }
     function closeThread() { selectedId = -1; currentThread = null; _threadReqId = -1; }
-    function setView(v) { view = v; refresh(); }
+    function setView(v) { view = v; limit = pageSize; localExhausted = false; refresh(); }
     function handleResponse(msg) {
+        if (msg.id === _olderReqId) {
+            _olderReqId = -1; olderGuard.stop(); loadingMore = false;
+            if (msg.error || !msg.result) return;
+            olderNext = msg.result.next || null;
+            olderDone = !msg.result.next || Object.keys(msg.result.next).length === 0;
+            if (msg.result.ingested > 0) { limit += pageSize; localExhausted = false; refresh(); }
+            else if (!olderDone) loadMore();   // empty window: keep walking back
+            return;
+        }
         if (msg.id === _syncReqId) { syncing = false; syncGuard.stop(); }
         if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
         if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
@@ -78,12 +103,15 @@ RippleButton {
             unread = msg.result.unread || 0;
             dnd = !!msg.result.dnd;
         } else if (msg.id === _threadsReqId && Array.isArray(msg.result)) {
-            threads = view === "unread" ? msg.result.filter(t => t.unread).slice(0, 25) : msg.result;
+            threads = msg.result;
+            localExhausted = msg.result.length < limit;
+            if (_olderReqId < 0) loadingMore = false;
         }
     }
     function clearState() {
         unread = 0; dnd = false; threads = []; syncing = false; requestError = "";
         _statusReqId = -1; _threadsReqId = -1; _syncReqId = -1; closeThread();
+        loadingMore = false; _olderReqId = -1; olderNext = null; olderDone = false; localExhausted = false; limit = pageSize;
         syncGuard.stop();
     }
 
@@ -94,7 +122,7 @@ RippleButton {
     middleClickAction: () => toggleApp()       // middle click
     onClicked: {
         if (!daemonConnected) toggleApp();
-        else { popupOpen = !popupOpen; if (popupOpen) refresh(); else closeThread(); }
+        else { popupOpen = !popupOpen; if (popupOpen) { limit = pageSize; refresh(); } else closeThread(); }
     }
 
     Component.onCompleted: cmdSocket.connected = true
@@ -138,6 +166,7 @@ RippleButton {
     }
     Timer { id: refreshDebounce; interval: 300; onTriggered: root.refresh() }
     Timer { id: subRetry; interval: 4000; onTriggered: if (cmdSocket.connected) subSocket.connected = true }
+    Timer { id: olderGuard; interval: 120000; onTriggered: { root.loadingMore = false; root._olderReqId = -1; } }
     Timer { id: syncGuard; interval: 20000; onTriggered: root.syncing = false }
     // Reconnect while the daemon is down, and a slow safety poll while it is up
     Timer { id: retryTimer; interval: 5000; repeat: true; onTriggered: { cmdSocket.connected = false; cmdSocket.connected = true; } }
@@ -151,18 +180,11 @@ RippleButton {
         color: Appearance.colors.colOnLayer0
         opacity: root.daemonConnected ? 1 : 0.4
     }
-    Rectangle {
+    Rectangle {  // unread dot (the cache only holds recent mail, so a count would be misleading)
         visible: root.unread > 0
-        anchors { top: parent.top; right: parent.right; topMargin: 1; rightMargin: 1 }
-        implicitWidth: Math.max(14, badge.implicitWidth + 6); implicitHeight: 14; radius: 7
+        anchors { top: parent.top; right: parent.right; topMargin: 4; rightMargin: 4 }
+        implicitWidth: 8; implicitHeight: 8; radius: 4
         color: root.dnd ? Appearance.colors.colOutline : Appearance.colors.colPrimary
-        StyledText {
-            id: badge
-            anchors.centerIn: parent
-            text: root.unread > 999 ? "999+" : root.unread
-            font.pixelSize: 9
-            color: Appearance.colors.colOnPrimary
-        }
     }
 
     Loader {

@@ -184,6 +184,24 @@ LazyLoader {
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         delegate: MailRow { width: list.width; store: root.store }
+                        function checkEnd() { if (contentHeight > 0 && contentHeight - contentY - height < 160) root.store.loadMore(); }
+                        onContentYChanged: checkEnd()
+                        onContentHeightChanged: loadMoreTimer.restart()
+                        Timer { id: loadMoreTimer; interval: 150; onTriggered: list.checkEnd() }
+                        footer: Item {
+                            width: list.width
+                            height: root.store.loadingMore ? 44 : 0
+                            visible: root.store.loadingMore
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 8
+                                MaterialSymbol {
+                                    text: "progress_activity"; iconSize: 20; color: Appearance.colors.colSubtext
+                                    RotationAnimation on rotation { running: root.store.loadingMore; from: 0; to: 360; duration: 900; loops: Animation.Infinite }
+                                }
+                                StyledText { text: "Loading older mail…"; font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
+                            }
+                        }
                     }
                 }
             }
