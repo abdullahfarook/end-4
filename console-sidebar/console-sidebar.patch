@@ -1,0 +1,15 @@
+--- a/modules/ii/bar/BarContent.qml
++++ b/modules/ii/bar/BarContent.qml
+@@ -95,6 +95,12 @@
+                 colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
+             }
+ 
++            ConsoleButton { // Console panel button
++                Layout.alignment: Qt.AlignVCenter
++                Layout.leftMargin: 2
++                colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
++            }
++
+             MailButton { // dankmail button
+                 Layout.alignment: Qt.AlignVCenter
+                 Layout.leftMargin: 2
