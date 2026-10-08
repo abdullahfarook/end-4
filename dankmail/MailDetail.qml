@@ -14,6 +14,18 @@ Rectangle {
     signal closeRequested()
 
     readonly property var thread: store.currentThread
+    property bool replying: false
+    property bool replyAll: false
+    readonly property var sentReplies: thread ? (store.sentReplies[thread.id] || []) : []  // replies sent from this panel
+    property var _threadId: null
+    onThreadChanged: {  // the store swaps the thread object on every refresh: reset only when another thread opens
+        const id = thread ? thread.id : null;
+        if (id === null || id === _threadId) return;
+        _threadId = id;
+        replying = false; replyBox.text = "";
+    }
+    onReplyingChanged: if (replying) focusTimer.restart()
+    Timer { id: focusTimer; interval: 60; onTriggered: replyBox.forceActiveFocus() }
     color: Appearance.m3colors.m3surfaceContainer
     radius: Appearance.rounding.normal
     border.width: 1
@@ -58,7 +70,7 @@ Rectangle {
             Act { visible: !!detail.thread; sym: "star"; tip: detail.thread && detail.thread.starred ? "Unstar" : "Star"
                   iconColor: detail.thread && detail.thread.starred ? "#f5b942" : Appearance.colors.colOnLayer1
                   onClicked: detail.store.op(detail.thread.starred ? "ops.unstar" : "ops.star", detail.thread.id) }
-            Act { visible: !!detail.thread; sym: "reply"; tip: "Reply in Dank Mail"; onClicked: detail.store.call("ui.replyThread", { "id": detail.thread.id }) }
+            Act { visible: !!detail.thread; sym: "reply"; tip: "Reply"; onClicked: detail.replying = !detail.replying }
             Act { visible: !!detail.thread; sym: "web"; tip: "Full view (browser window)"; onClicked: detail.store.fetchHtml(detail.thread.id, true) }
             Act { visible: !!detail.thread; sym: "open_in_new"; tip: "Open in webmail"; onClicked: detail.store.call("ui.openLink", { "id": detail.thread.id }) }
             Act { sym: "close"; tip: "Close"; onClicked: detail.closeRequested() }
@@ -84,6 +96,40 @@ Rectangle {
             boundsBehavior: Flickable.StopAtBounds
             model: detail.thread ? detail.thread.messages : []
             ScrollBar.vertical: StyledScrollBar {}
+            footer: Column {  // replies you just sent
+                width: messages.width
+                Repeater {
+                    model: detail.sentReplies
+                    delegate: Column {
+                        required property var modelData
+                        width: messages.width
+                        Rectangle { width: parent.width; height: 1; color: Appearance.colors.colLayer0Border; opacity: 0.5 }
+                        Item {
+                            width: parent.width
+                            implicitHeight: sentCol.implicitHeight + 28
+                            height: implicitHeight
+                            ColumnLayout {
+                                id: sentCol
+                                x: 14; y: 14
+                                width: parent.width - 28
+                                spacing: 4
+                                StyledText {
+                                    text: qsTr("You") + " · " + modelData.time + (modelData.all ? " · " + qsTr("reply all") : "")
+                                    font.weight: Font.Bold
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colPrimary
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: modelData.body
+                                    wrapMode: Text.Wrap
+                                    color: Appearance.colors.colOnLayer1
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             delegate: ColumnLayout {
                 id: msg
                 required property var modelData
@@ -154,6 +200,44 @@ Rectangle {
                     visible: msg.index < messages.count - 1
                     Layout.fillWidth: true; implicitHeight: 1
                     color: Appearance.colors.colLayer0Border; opacity: 0.5
+                }
+            }
+        }
+
+        Rectangle { visible: detail.replying; Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border }
+        ColumnLayout {  // inline reply: plain text, sent through ops.reply (no need to open the Dank Mail app)
+            visible: detail.replying && !!detail.thread
+            Layout.fillWidth: true
+            Layout.margins: 10
+            spacing: 6
+            MaterialTextArea {
+                id: replyBox
+                Layout.fillWidth: true
+                Layout.preferredHeight: 110
+                placeholderText: qsTr("Reply…")
+                wrapMode: TextEdit.Wrap
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                StyledText { text: qsTr("Reply all"); color: Appearance.colors.colSubtext; font.pixelSize: Appearance.font.pixelSize.smaller }
+                StyledSwitch { checked: detail.replyAll; onClicked: detail.replyAll = !detail.replyAll }
+                RippleButton {
+                    implicitWidth: 72; implicitHeight: 30; buttonRadius: 15
+                    enabled: replyBox.text.trim() !== ""
+                    colBackground: enabled ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                    colBackgroundHover: enabled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2
+                    onClicked: {
+                        detail.store.call("ops.reply", { "id": detail.thread.id, "body": replyBox.text, "replyAll": detail.replyAll });
+                        const all = Object.assign({}, detail.store.sentReplies);
+                        all[detail.thread.id] = detail.sentReplies.concat([{ "body": replyBox.text.trim(), "all": detail.replyAll, "time": Qt.formatTime(new Date(), "HH:mm") }]);
+                        detail.store.sentReplies = all;
+                        replyBox.text = "";
+                        detail.replying = false;
+                        Qt.callLater(() => messages.positionViewAtEnd());
+                    }
+                    StyledText { anchors.centerIn: parent; text: qsTr("Send"); color: parent.enabled ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext }
                 }
             }
         }

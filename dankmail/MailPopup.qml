@@ -54,6 +54,7 @@ LazyLoader {
         }
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand  // lets the inline reply box take typing
 
         Item {
             id: wrap  // input region: list panel plus the detail panel when open
