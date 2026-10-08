@@ -1,0 +1,29 @@
+diff -ruN -x bin a/core/internal/provider/gmail/realapi.go b/core/internal/provider/gmail/realapi.go
+--- a/core/internal/provider/gmail/realapi.go	2026-10-03 06:03:16.000000000 +0500
++++ b/core/internal/provider/gmail/realapi.go	2026-10-08 23:58:12.852926104 +0500
+@@ -48,7 +48,7 @@
+ }
+ 
+ func (r *realAPI) ListThreads(ctx context.Context, labelIDs []string, pageToken string) ([]string, string, error) {
+-	call := r.svc.Users.Threads.List(userID).Context(ctx)
++	call := r.svc.Users.Threads.List(userID).Q("newer_than:7d").Context(ctx)
+ 	if len(labelIDs) > 0 {
+ 		call = call.LabelIds(labelIDs...)
+ 	}
+diff -ruN -x bin a/core/internal/provider/microsoft/client.go b/core/internal/provider/microsoft/client.go
+--- a/core/internal/provider/microsoft/client.go	2026-10-03 06:03:16.000000000 +0500
++++ b/core/internal/provider/microsoft/client.go	2026-10-08 23:58:12.852887138 +0500
+@@ -212,7 +212,12 @@
+ func (c *Client) DeltaMessages(ctx context.Context, folder, link string) (deltaPage, error) {
+ 	u := link
+ 	if u == "" {
+-		u = fmt.Sprintf("%s/me/mailFolders/%s/messages/delta?$select=%s", graphBase, folder, url.QueryEscape(deltaSelect))
++		// Only the last 7 days are synced eagerly; older mail is pulled on demand (HistoryPage).
++		now := time.Now().UTC()
++		d := now.AddDate(0, 0, -7)
++		since := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC).Format("2006-01-02T15:04:05Z")
++		u = fmt.Sprintf("%s/me/mailFolders/%s/messages/delta?$select=%s&$filter=%s", graphBase, folder, url.QueryEscape(deltaSelect),
++			url.QueryEscape("receivedDateTime ge "+since))
+ 	}
+ 	var doc struct {
+ 		Value     []wireMessage `json:"value"`

@@ -20,7 +20,7 @@ RippleButton {
     property string requestError: ""
     property bool popupOpen: false
     property var accounts: []              // [{ id, type, email, unread, ... }] from accounts.list
-    property string accountFilter: ""      // "" = all accounts, else an account id; kept while the shell runs, reset to All on restart
+    property string accountFilter: ""      // "" = all accounts, else an account id; reset to All whenever the popup closes
     property int _accountsReqId: -1
     property var lastSeen: ({})            // accountId -> ISO time you last viewed that account's chip with the popup open
     property var newest: ({})              // accountId -> lastMessageAt of its newest unread thread
@@ -238,6 +238,9 @@ RippleButton {
         if (!daemonConnected) toggleApp();
         else { popupOpen = !popupOpen; if (popupOpen) { limit = pageSize; markSeen(); refresh(); } else closeThread(); }
     }
+
+    // The account selection is not persisted: closing the popup (by any path) goes back to All accounts
+    onPopupOpenChanged: if (!popupOpen && accountFilter !== "") setAccount("")
 
     Component.onCompleted: { Quickshell.execDetached(["mkdir", "-p", viewerDir]); cmdSocket.connected = true; }
 

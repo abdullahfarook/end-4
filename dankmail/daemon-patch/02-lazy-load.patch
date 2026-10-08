@@ -1,0 +1,390 @@
+diff -ruN -x bin b/core/cmd/dmail/archived.go c/core/cmd/dmail/archived.go
+--- b/core/cmd/dmail/archived.go	2026-10-08 23:58:12.798192176 +0500
++++ c/core/cmd/dmail/archived.go	2026-10-08 23:58:12.840136929 +0500
+@@ -12,14 +12,18 @@
+ // Each account advances independently: failed pages retain their token for a
+ // retry, while successful accounts are not fetched again on the next page.
+ func (d *daemon) fetchArchived(ctx context.Context, p map[string]any) (any, error) {
+-	return d.fetchMailboxHistory(ctx, p, false)
++	return d.fetchMailboxHistory(ctx, p, "archived")
+ }
+ 
+ func (d *daemon) fetchSent(ctx context.Context, p map[string]any) (any, error) {
+-	return d.fetchMailboxHistory(ctx, p, true)
++	return d.fetchMailboxHistory(ctx, p, "sent")
+ }
+ 
+-func (d *daemon) fetchMailboxHistory(ctx context.Context, p map[string]any, sent bool) (any, error) {
++func (d *daemon) fetchOlder(ctx context.Context, p map[string]any) (any, error) {
++	return d.fetchMailboxHistory(ctx, p, "older")
++}
++
++func (d *daemon) fetchMailboxHistory(ctx context.Context, p map[string]any, mode string) (any, error) {
+ 	wanted, _ := p["account"].(string)
+ 	if wanted != "" {
+ 		if _, err := parseUUID(wanted); err != nil {
+@@ -58,10 +62,14 @@
+ 			continue
+ 		}
+ 		var page func(context.Context, string) (provider.Changes, string, error)
+-		if sent {
++		if mode == "sent" {
+ 			if pager, ok := prov.(provider.SentPager); ok {
+ 				page = pager.SentPage
+ 			}
++		} else if mode == "older" {
++			if pager, ok := prov.(provider.HistoryPager); ok {
++				page = pager.HistoryPage
++			}
+ 		} else {
+ 			if pager, ok := prov.(provider.ArchivedPager); ok {
+ 				page = pager.ArchivedPage
+diff -ruN -x bin b/core/cmd/dmail/handlers.go c/core/cmd/dmail/handlers.go
+--- b/core/cmd/dmail/handlers.go	2026-10-08 23:58:12.798246395 +0500
++++ c/core/cmd/dmail/handlers.go	2026-10-08 23:58:12.841139180 +0500
+@@ -17,6 +17,7 @@
+ 	"github.com/arqueon/dankmail/core/internal/ipc"
+ 	"github.com/arqueon/dankmail/core/internal/provider"
+ 	dsync "github.com/arqueon/dankmail/core/internal/sync"
++	"github.com/arqueon/dankmail/core/models"
+ 	"github.com/arqueon/dankmail/core/repo"
+ )
+ 
+@@ -77,6 +78,52 @@
+ 		return d.repo.GetThread(ctx, id)
+ 	})
+ 
++	// messages.getHtml fetches the original HTML of one message on demand from
++	// the provider (never stored). Params: threadId (local), optional messageId
++	// (local; default the newest received message). Result: {messageId, html, text, subject}.
++	srv.Register("messages.getHtml", func(ctx context.Context, p map[string]any) (any, error) {
++		tid, err := intParam(p, "threadId")
++		if err != nil {
++			return nil, err
++		}
++		t, err := d.repo.GetThread(ctx, tid)
++		if err != nil {
++			return nil, err
++		}
++		var msg *models.MessageView
++		want, _ := intParam(p, "messageId")
++		for i := len(t.Messages) - 1; i >= 0; i-- {
++			m := &t.Messages[i]
++			if (want != 0 && m.ID == want) || (want == 0 && !m.IsSent) {
++				msg = m
++				break
++			}
++		}
++		if msg == nil && len(t.Messages) > 0 {
++			msg = &t.Messages[len(t.Messages)-1]
++		}
++		if msg == nil {
++			return map[string]any{"messageId": 0, "html": "", "text": "", "subject": t.Subject}, nil
++		}
++		accID, err := parseUUID(t.AccountID)
++		if err != nil {
++			return nil, err
++		}
++		prov, ok := d.registry.Provider(accID)
++		if !ok {
++			return nil, fmt.Errorf("account not available")
++		}
++		f, ok := prov.(provider.HTMLFetcher)
++		if !ok {
++			return map[string]any{"messageId": msg.ID, "html": "", "text": msg.BodyText, "subject": t.Subject}, nil
++		}
++		html, err := f.MessageHTML(ctx, t.ProviderThreadID, msg.ProviderMessageID)
++		if err != nil {
++			return nil, err
++		}
++		return map[string]any{"messageId": msg.ID, "html": html, "text": msg.BodyText, "subject": t.Subject}, nil
++	})
++
+ 	// threads.previewOpened drives the mark-read-on-preview hook.
+ 	srv.Register("threads.previewOpened", func(ctx context.Context, p map[string]any) (any, error) {
+ 		if !d.settings.Get().MarkReadOnPreview {
+@@ -294,6 +341,7 @@
+ 	srv.Register("threads.searchRemote", d.searchRemote)
+ 	srv.Register("threads.fetchArchived", d.fetchArchived)
+ 	srv.Register("threads.fetchSent", d.fetchSent)
++	srv.Register("threads.fetchOlder", d.fetchOlder)
+ 
+ 	// ui.openSearch continues a local search in the account's webmail
+ 	// (full history lives there; the local cache only spans retention).
+diff -ruN -x bin b/core/internal/provider/gmail/realapi.go c/core/internal/provider/gmail/realapi.go
+--- b/core/internal/provider/gmail/realapi.go	2026-10-08 23:58:12.852926104 +0500
++++ c/core/internal/provider/gmail/realapi.go	2026-10-08 23:58:12.841199496 +0500
+@@ -3,9 +3,12 @@
+ import (
+ 	"context"
+ 	"encoding/base64"
++	"fmt"
+ 	"net/http"
++	"time"
+ 
+ 	"github.com/arqueon/dankmail/core/errdefs"
++	"github.com/arqueon/dankmail/core/internal/provider"
+ 	gmailv1 "google.golang.org/api/gmail/v1"
+ 	"google.golang.org/api/option"
+ )
+@@ -141,3 +144,76 @@
+ 	}
+ 	return p.EmailAddress, p.HistoryId, nil
+ }
++
++// MessageHTML returns the original text/html part of one message ("" when
++// the message is plain text only). Fetched on demand, never stored.
++func (p *Provider) MessageHTML(ctx context.Context, threadID, messageID string) (string, error) {
++	t, err := p.api.GetThread(ctx, threadID)
++	if err != nil {
++		return "", classify(err)
++	}
++	for _, m := range t.Messages {
++		if m.Id == messageID {
++			return firstHTML(m.Payload), nil
++		}
++	}
++	return "", nil
++}
++
++const historyFloor = 2000
++
++// HistoryPage loads one older month of inbox mail (backfill, never notified),
++// like the Microsoft provider. The token is the exclusive upper bound (RFC3339)
++// of the window to load; "" starts just before the last 7 days (the initial
++// sync window). The returned token is the next window's upper bound, or ""
++// when the mailbox history is exhausted.
++func (p *Provider) HistoryPage(ctx context.Context, pageToken string) (provider.Changes, string, error) {
++	ctx = withRetryBudget(ctx)
++	to := time.Time{}
++	if pageToken == "" {
++		d := time.Now().UTC().AddDate(0, 0, -7)
++		to = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
++	} else {
++		var err error
++		if to, err = time.Parse(time.RFC3339, pageToken); err != nil {
++			return provider.Changes{}, pageToken, fmt.Errorf("invalid history cursor")
++		}
++	}
++	changes := provider.Changes{Backfill: true}
++	// Skip over empty months so one request always yields something (or reaches the floor).
++	for tries := 0; tries < 12 && to.Year() >= historyFloor; tries++ {
++		from := to.AddDate(0, -1, 0)
++		query := fmt.Sprintf("in:inbox after:%d before:%d", from.Unix(), to.Unix())
++		page := ""
++		for {
++			ids, next, err := p.api.SearchThreads(ctx, query, page, 100)
++			if err != nil {
++				return changes, to.Format(time.RFC3339), classify(err)
++			}
++			for _, id := range ids {
++				t, err := p.api.GetThread(ctx, id)
++				if err != nil {
++					if isNotFound(err) {
++						continue
++					}
++					return changes, to.Format(time.RFC3339), classify(err)
++				}
++				if d := p.threadDelta(t); d.MessageCount > 0 {
++					changes.Upserted = append(changes.Upserted, d)
++				}
++			}
++			if next == "" {
++				break
++			}
++			page = next
++		}
++		to = from
++		if len(changes.Upserted) > 0 {
++			break
++		}
++	}
++	if to.Year() < historyFloor {
++		return changes, "", nil
++	}
++	return changes, to.Format(time.RFC3339), nil
++}
+diff -ruN -x bin b/core/internal/provider/microsoft/client.go c/core/internal/provider/microsoft/client.go
+--- b/core/internal/provider/microsoft/client.go	2026-10-08 23:58:12.852887138 +0500
++++ c/core/internal/provider/microsoft/client.go	2026-10-08 23:58:12.841237021 +0500
+@@ -114,6 +114,7 @@
+ 	if w.Body != nil {
+ 		if strings.EqualFold(w.Body.ContentType, "html") {
+ 			m.BodyText = htmlToText(w.Body.Content)
++			m.BodyHTML = w.Body.Content
+ 		} else {
+ 			m.BodyText = strings.TrimSpace(w.Body.Content)
+ 		}
+@@ -155,7 +156,11 @@
+ 	if body != nil {
+ 		req.Header.Set("Content-Type", "application/json")
+ 	}
+-	req.Header.Set("Prefer", `IdType="ImmutableId", outlook.body-content-type="text"`)
++	bodyType := "text"
++	if ctx.Value(htmlBodyKey{}) != nil {
++		bodyType = "html" // on-demand HTML fetch for the viewer
++	}
++	req.Header.Set("Prefer", `IdType="ImmutableId", outlook.body-content-type="`+bodyType+`"`)
+ 	resp, err := c.hc.Do(req)
+ 	if err != nil {
+ 		return err
+@@ -357,3 +362,45 @@
+ 	}
+ 	return strings.TrimSpace(text)
+ }
++
++// ListInboxRange returns the conversation IDs of inbox mail received in [from, to), newest first.
++func (c *Client) ListInboxRange(ctx context.Context, from, to time.Time) ([]string, error) {
++	f := "receivedDateTime ge " + from.UTC().Format("2006-01-02T15:04:05Z") + " and receivedDateTime lt " + to.UTC().Format("2006-01-02T15:04:05Z")
++	u := graphBase + "/me/mailFolders/inbox/messages?$select=id,conversationId&$top=100&$orderby=" + url.QueryEscape("receivedDateTime desc") + "&$filter=" + url.QueryEscape(f)
++	ids := []string{}
++	seen := map[string]bool{}
++	for u != "" {
++		var doc struct {
++			Value    []wireMessage `json:"value"`
++			NextLink string        `json:"@odata.nextLink"`
++		}
++		if err := c.do(ctx, http.MethodGet, u, nil, &doc); err != nil {
++			return nil, err
++		}
++		for _, m := range doc.Value {
++			if m.ConversationID != "" && !seen[m.ConversationID] {
++				ids = append(ids, m.ConversationID)
++				seen[m.ConversationID] = true
++			}
++		}
++		u = doc.NextLink
++	}
++	return ids, nil
++}
++
++type htmlBodyKey struct{}
++
++// withHTMLBody makes requests on ctx ask Graph for the html body instead of text.
++func withHTMLBody(ctx context.Context) context.Context {
++	return context.WithValue(ctx, htmlBodyKey{}, true)
++}
++
++// MessageHTML returns the raw html body of one message ("" when the body is
++// plain text). Fetched on demand, never stored.
++func (p *Provider) MessageHTML(ctx context.Context, _, messageID string) (string, error) {
++	m, err := p.api.GetMessage(withHTMLBody(ctx), messageID)
++	if err != nil {
++		return "", err
++	}
++	return m.BodyHTML, nil
++}
+diff -ruN -x bin b/core/internal/provider/microsoft/graph.go c/core/internal/provider/microsoft/graph.go
+--- b/core/internal/provider/microsoft/graph.go	2026-10-08 23:58:12.811410851 +0500
++++ c/core/internal/provider/microsoft/graph.go	2026-10-08 23:58:12.841268187 +0500
+@@ -30,6 +30,7 @@
+ 	HasAttachments    bool
+ 	IsDraft           bool
+ 	BodyText          string // plain text (client distills text/html)
++	BodyHTML          string // raw html body, only when the message body is html
+ 	// Headers carries the reply-threading headers (References, Reply-To)
+ 	// from internetMessageHeaders, keyed by canonical name.
+ 	Headers     map[string]string
+diff -ruN -x bin b/core/internal/provider/microsoft/history.go c/core/internal/provider/microsoft/history.go
+--- b/core/internal/provider/microsoft/history.go	1970-01-01 05:00:00.000000000 +0500
++++ c/core/internal/provider/microsoft/history.go	2026-10-08 23:58:12.840277161 +0500
+@@ -0,0 +1,70 @@
++package microsoft
++
++import (
++	"context"
++	"fmt"
++	"time"
++
++	"github.com/arqueon/dankmail/core/internal/provider"
++)
++
++type rangeAPI interface {
++	ListInboxRange(ctx context.Context, from, to time.Time) ([]string, error)
++}
++
++const historyFloor = 2000
++
++// HistoryPage loads one older month of inbox mail (backfill, never notified).
++// The token is the exclusive upper bound (RFC3339) of the window to load; ""
++// starts just before the last 7 days. The returned token is the next window's
++// upper bound, or "" when the mailbox history is exhausted.
++func (p *Provider) HistoryPage(ctx context.Context, pageToken string) (provider.Changes, string, error) {
++	api, ok := p.api.(rangeAPI)
++	if !ok {
++		return provider.Changes{}, pageToken, fmt.Errorf("history unavailable")
++	}
++	to := time.Time{}
++	if pageToken == "" {
++		now := time.Now().UTC()
++		d := now.AddDate(0, 0, -7)
++		to = time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
++	} else {
++		var err error
++		if to, err = time.Parse(time.RFC3339, pageToken); err != nil {
++			return provider.Changes{}, pageToken, fmt.Errorf("invalid history cursor")
++		}
++	}
++	changes := provider.Changes{Backfill: true}
++	// Skip over empty months so one request always yields something (or reaches the floor).
++	for tries := 0; tries < 12 && to.Year() >= historyFloor; tries++ {
++		from := to.AddDate(0, -1, 0)
++		ids, err := api.ListInboxRange(ctx, from, to)
++		if err != nil {
++			return changes, to.Format(time.RFC3339), classify(err)
++		}
++		for _, id := range ids {
++			messages, err := p.api.ListConversation(ctx, id)
++			if isNotFound(err) {
++				continue
++			}
++			var d provider.ThreadDelta
++			if err == nil {
++				d, err = p.threadDelta(ctx, id, messages)
++			}
++			if err != nil {
++				return changes, to.Format(time.RFC3339), classify(err)
++			}
++			if d.MessageCount > 0 {
++				changes.Upserted = append(changes.Upserted, d)
++			}
++		}
++		to = from
++		if len(changes.Upserted) > 0 {
++			break
++		}
++	}
++	if to.Year() < historyFloor {
++		return changes, "", nil
++	}
++	return changes, to.Format(time.RFC3339), nil
++}
+diff -ruN -x bin b/core/internal/provider/provider.go c/core/internal/provider/provider.go
+--- b/core/internal/provider/provider.go	2026-10-08 23:58:12.811447543 +0500
++++ c/core/internal/provider/provider.go	2026-10-08 23:58:12.841292725 +0500
+@@ -172,6 +172,14 @@
+ 	SearchRemote(ctx context.Context, query string, limit int) (Changes, error)
+ }
+ 
++// HTMLFetcher is an optional interface: providers that can return the
++// original text/html body of one message on demand (never stored locally).
++// threadID is the provider-native thread ID, messageID the provider-native
++// message ID. An empty string means the message has no HTML part.
++type HTMLFetcher interface {
++	MessageHTML(ctx context.Context, threadID, messageID string) (string, error)
++}
++
+ // ArchivedPager reads one provider page of archived history. Tokens are opaque;
+ // returned changes are backfill and must never produce new-mail notifications.
+ type ArchivedPager interface {
+@@ -244,3 +252,10 @@
+ type SentPager interface {
+ 	SentPage(ctx context.Context, pageToken string) (Changes, string, error)
+ }
++
++// HistoryPager loads one older time window of the inbox per call. Tokens are
++// opaque; "" starts from the oldest already-synced boundary, and an empty
++// returned token means there is nothing older. Changes are backfill.
++type HistoryPager interface {
++	HistoryPage(ctx context.Context, pageToken string) (Changes, string, error)
++}
