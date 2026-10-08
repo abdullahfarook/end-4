@@ -14,6 +14,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 | `cpu-info/` | CPU Speed (avg GHz) and Temp (package °C) rows in the bar's resources popup | `~/.config/quickshell/ii/` (ResourceUsage + ResourcesPopup patch) |
 | `cursor/` | Pointer no longer jumps back to a dialog (`cursor.no_warps = true`) | `~/.config/hypr/hyprland/general.lua` |
 | `widgets/` | "Frequent apps" in the launcher (patch + saved copies) | `~/.config/quickshell/ii/` |
+| `bar-search/` | Search button in the bar right of the workspaces; opens the SUPER-key overview/launcher | `~/.config/quickshell/ii/` (BarContent patch + SearchButton.qml) |
 
 ## Workflow: change, back up, apply, push
 
