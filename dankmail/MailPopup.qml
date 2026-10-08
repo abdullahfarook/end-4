@@ -1,10 +1,12 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 
 // Inbox popup for dankmail (port of the DankMaterialShell plugin's popout): tabs, rows with hover actions, sync/open buttons.
@@ -185,7 +187,9 @@ LazyLoader {
                             buttonRadius: 16
                             toggled: root.store.accountFilter === modelData.id
                             onClicked: root.store.setAccount(modelData.id)
-                            readonly property color fg: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+                            readonly property color fg: Appearance.colors.colOnLayer1   // plain black/white like the other shell icons
+                            colBackgroundToggled: Appearance.colors.colLayer2Active
+                            colBackgroundToggledHover: Appearance.colors.colLayer2Active
                             RowLayout {
                                 id: chipRow
                                 anchors.centerIn: parent
@@ -197,6 +201,8 @@ LazyLoader {
                                     sourceSize: Qt.size(40, 40)
                                     Layout.preferredWidth: 20; Layout.preferredHeight: 20
                                     fillMode: Image.PreserveAspectFit
+                                    layer.enabled: true     // monochrome: tint the white glyph with the chip's text colour
+                                    layer.effect: MultiEffect { colorization: 1; colorizationColor: chip.fg }
                                 }
                                 StyledText {
                                     visible: chip.expanded
@@ -207,13 +213,13 @@ LazyLoader {
                                 Rectangle {
                                     visible: chip.modelData.unread > 0
                                     implicitWidth: badge.implicitWidth + 10; implicitHeight: 16; radius: 8
-                                    color: chip.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
+                                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer1, 0.82)
                                     StyledText {
                                         id: badge
                                         anchors.centerIn: parent
                                         text: chip.modelData.unread
                                         font.pixelSize: 10
-                                        color: chip.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnPrimary
+                                        color: Appearance.colors.colOnLayer1
                                     }
                                 }
                             }
