@@ -1,0 +1,13 @@
+diff --git a/core/internal/provider/gmail/realapi.go b/core/internal/provider/gmail/realapi.go
+index ee25632..468ab1a 100644
+--- a/core/internal/provider/gmail/realapi.go
++++ b/core/internal/provider/gmail/realapi.go
+@@ -48,7 +48,7 @@ func NewWithClient(accountID, email string, hc *http.Client, opts Options) (*Pro
+ }
+ 
+ func (r *realAPI) ListThreads(ctx context.Context, labelIDs []string, pageToken string) ([]string, string, error) {
+-	call := r.svc.Users.Threads.List(userID).Context(ctx)
++	call := r.svc.Users.Threads.List(userID).Q("newer_than:30d").Context(ctx)
+ 	if len(labelIDs) > 0 {
+ 		call = call.LabelIds(labelIDs...)
+ 	}
