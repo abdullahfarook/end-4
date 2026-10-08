@@ -44,7 +44,7 @@
 +                StyledPopupValueRow {
 +                    icon: "speed"
 +                    label: Translation.tr("Speed:")
-+                    value: `${ResourceUsage.cpuFreqGHz.toFixed(2)} G<span style="font-size:10px">Hz</span>`
++                    value: `${ResourceUsage.cpuFreqGHz.toFixed(2)} GHz`
 +                }
 +                StyledPopupValueRow {
 +                    icon: "device_thermostat"
@@ -55,12 +55,3 @@
              }
          }
      }
---- a/modules/ii/bar/StyledPopupValueRow.qml
-+++ b/modules/ii/bar/StyledPopupValueRow.qml
-@@ -25,5 +25,6 @@
-         visible: root.value !== ""
-         color: Appearance.colors.colOnSurfaceVariant
-         text: root.value
-+        textFormat: Text.RichText
-     }
- }
