@@ -385,10 +385,7 @@
     },
     "search": {
         "engineBaseUrl": "https://www.google.com/search?q=",
-        "excludedSites": [
-            "quora.com",
-            "facebook.com"
-        ],
+        "excludedSites": [],
         "imageSearch": {
             "imageSearchEngineBaseUrl": "https://lens.google.com/uploadbyurl?url=",
             "useCircleSelection": false
