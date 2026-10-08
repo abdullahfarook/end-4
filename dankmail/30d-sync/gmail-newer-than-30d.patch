@@ -1,3 +1,91 @@
+diff --git a/core/cmd/dmail/handlers.go b/core/cmd/dmail/handlers.go
+index 36e8cf0..e4a2fa0 100644
+--- a/core/cmd/dmail/handlers.go
++++ b/core/cmd/dmail/handlers.go
+@@ -17,6 +17,7 @@ import (
+ 	"github.com/arqueon/dankmail/core/internal/ipc"
+ 	"github.com/arqueon/dankmail/core/internal/provider"
+ 	dsync "github.com/arqueon/dankmail/core/internal/sync"
++	"github.com/arqueon/dankmail/core/models"
+ 	"github.com/arqueon/dankmail/core/repo"
+ )
+ 
+@@ -77,6 +78,52 @@ func (d *daemon) registerIPC(srv *ipc.Server) {
+ 		return d.repo.GetThread(ctx, id)
+ 	})
+ 
++	// messages.getHtml fetches the original HTML of one message on demand from
++	// the provider (never stored). Params: threadId (local), optional messageId
++	// (local; default the newest received message). Result: {messageId, html, text, subject}.
++	srv.Register("messages.getHtml", func(ctx context.Context, p map[string]any) (any, error) {
++		tid, err := intParam(p, "threadId")
++		if err != nil {
++			return nil, err
++		}
++		t, err := d.repo.GetThread(ctx, tid)
++		if err != nil {
++			return nil, err
++		}
++		var msg *models.MessageView
++		want, _ := intParam(p, "messageId")
++		for i := len(t.Messages) - 1; i >= 0; i-- {
++			m := &t.Messages[i]
++			if (want != 0 && m.ID == want) || (want == 0 && !m.IsSent) {
++				msg = m
++				break
++			}
++		}
++		if msg == nil && len(t.Messages) > 0 {
++			msg = &t.Messages[len(t.Messages)-1]
++		}
++		if msg == nil {
++			return map[string]any{"messageId": 0, "html": "", "text": "", "subject": t.Subject}, nil
++		}
++		accID, err := parseUUID(t.AccountID)
++		if err != nil {
++			return nil, err
++		}
++		prov, ok := d.registry.Provider(accID)
++		if !ok {
++			return nil, fmt.Errorf("account not available")
++		}
++		f, ok := prov.(provider.HTMLFetcher)
++		if !ok {
++			return map[string]any{"messageId": msg.ID, "html": "", "text": msg.BodyText, "subject": t.Subject}, nil
++		}
++		html, err := f.MessageHTML(ctx, t.ProviderThreadID, msg.ProviderMessageID)
++		if err != nil {
++			return nil, err
++		}
++		return map[string]any{"messageId": msg.ID, "html": html, "text": msg.BodyText, "subject": t.Subject}, nil
++	})
++
+ 	// threads.previewOpened drives the mark-read-on-preview hook.
+ 	srv.Register("threads.previewOpened", func(ctx context.Context, p map[string]any) (any, error) {
+ 		if !d.settings.Get().MarkReadOnPreview {
+diff --git a/core/internal/provider/gmail/gmail.go b/core/internal/provider/gmail/gmail.go
+index f3ea0aa..af635c5 100644
+--- a/core/internal/provider/gmail/gmail.go
++++ b/core/internal/provider/gmail/gmail.go
+@@ -584,3 +584,18 @@ func (p *Provider) historyPage(ctx context.Context, query, pageToken string) (pr
+ 	}
+ 	return changes, encodeArchiveCursor(archiveCursor{Account: p.accountID, Query: query, Page: next}), nil
+ }
++
++// MessageHTML returns the original text/html part of one message ("" when
++// the message is plain text only). Fetched on demand, never stored.
++func (p *Provider) MessageHTML(ctx context.Context, threadID, messageID string) (string, error) {
++	t, err := p.api.GetThread(ctx, threadID)
++	if err != nil {
++		return "", classify(err)
++	}
++	for _, m := range t.Messages {
++		if m.Id == messageID {
++			return firstHTML(m.Payload), nil
++		}
++	}
++	return "", nil
++}
 diff --git a/core/internal/provider/gmail/realapi.go b/core/internal/provider/gmail/realapi.go
 index ee25632..468ab1a 100644
 --- a/core/internal/provider/gmail/realapi.go
@@ -11,3 +99,88 @@ index ee25632..468ab1a 100644
  	if len(labelIDs) > 0 {
  		call = call.LabelIds(labelIDs...)
  	}
+diff --git a/core/internal/provider/microsoft/client.go b/core/internal/provider/microsoft/client.go
+index 32c3a84..d97817a 100644
+--- a/core/internal/provider/microsoft/client.go
++++ b/core/internal/provider/microsoft/client.go
+@@ -114,6 +114,7 @@ func (w *wireMessage) toGraphMessage() *graphMessage {
+ 	if w.Body != nil {
+ 		if strings.EqualFold(w.Body.ContentType, "html") {
+ 			m.BodyText = htmlToText(w.Body.Content)
++			m.BodyHTML = w.Body.Content
+ 		} else {
+ 			m.BodyText = strings.TrimSpace(w.Body.Content)
+ 		}
+@@ -155,7 +156,11 @@ func (c *Client) do(ctx context.Context, method, u string, body any, out any) er
+ 	if body != nil {
+ 		req.Header.Set("Content-Type", "application/json")
+ 	}
+-	req.Header.Set("Prefer", `IdType="ImmutableId", outlook.body-content-type="text"`)
++	bodyType := "text"
++	if ctx.Value(htmlBodyKey{}) != nil {
++		bodyType = "html" // on-demand HTML fetch for the viewer
++	}
++	req.Header.Set("Prefer", `IdType="ImmutableId", outlook.body-content-type="`+bodyType+`"`)
+ 	resp, err := c.hc.Do(req)
+ 	if err != nil {
+ 		return err
+@@ -352,3 +357,10 @@ func htmlToText(html string) string {
+ 	}
+ 	return strings.TrimSpace(text)
+ }
++
++type htmlBodyKey struct{}
++
++// withHTMLBody makes requests on ctx ask Graph for the html body instead of text.
++func withHTMLBody(ctx context.Context) context.Context {
++	return context.WithValue(ctx, htmlBodyKey{}, true)
++}
+diff --git a/core/internal/provider/microsoft/graph.go b/core/internal/provider/microsoft/graph.go
+index b02e3a6..5d759d0 100644
+--- a/core/internal/provider/microsoft/graph.go
++++ b/core/internal/provider/microsoft/graph.go
+@@ -30,6 +30,7 @@ type graphMessage struct {
+ 	HasAttachments    bool
+ 	IsDraft           bool
+ 	BodyText          string // plain text (client distills text/html)
++	BodyHTML          string // raw html body, only when the message body is html
+ 	// Headers carries the reply-threading headers (References, Reply-To)
+ 	// from internetMessageHeaders, keyed by canonical name.
+ 	Headers     map[string]string
+diff --git a/core/internal/provider/microsoft/microsoft.go b/core/internal/provider/microsoft/microsoft.go
+index 850cf24..d201151 100644
+--- a/core/internal/provider/microsoft/microsoft.go
++++ b/core/internal/provider/microsoft/microsoft.go
+@@ -308,3 +308,13 @@ func (p *Provider) WebLink(threadID, messageID string) (string, bool) {
+ 	}
+ 	return "https://outlook.live.com/mail/", true
+ }
++
++// MessageHTML returns the raw html body of one message ("" when the body is
++// plain text). Fetched on demand, never stored.
++func (p *Provider) MessageHTML(ctx context.Context, _, messageID string) (string, error) {
++	m, err := p.api.GetMessage(withHTMLBody(ctx), messageID)
++	if err != nil {
++		return "", err
++	}
++	return m.BodyHTML, nil
++}
+diff --git a/core/internal/provider/provider.go b/core/internal/provider/provider.go
+index 85da596..543a0cf 100644
+--- a/core/internal/provider/provider.go
++++ b/core/internal/provider/provider.go
+@@ -172,6 +172,14 @@ type RemoteSearcher interface {
+ 	SearchRemote(ctx context.Context, query string, limit int) (Changes, error)
+ }
+ 
++// HTMLFetcher is an optional interface: providers that can return the
++// original text/html body of one message on demand (never stored locally).
++// threadID is the provider-native thread ID, messageID the provider-native
++// message ID. An empty string means the message has no HTML part.
++type HTMLFetcher interface {
++	MessageHTML(ctx context.Context, threadID, messageID string) (string, error)
++}
++
+ // ArchivedPager reads one provider page of archived history. Tokens are opaque;
+ // returned changes are backfill and must never produce new-mail notifications.
+ type ArchivedPager interface {

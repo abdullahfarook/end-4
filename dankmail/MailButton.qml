@@ -33,6 +33,15 @@ RippleButton {
     property int _threadsReqId: -1
     property var _syncReqs: ({})           // ids of in-flight system.sync requests
     property int _threadReqId: -1
+    property int _htmlReqId: -1
+    property bool _htmlForViewer: false
+    property var rawHtml: ({})             // local message id -> original HTML of the newest received message of the open thread
+    // HTML viewer (viewer/mailview.qml): one reused window; the widget writes the message HTML + a pointer file it polls
+    readonly property string viewerDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/dankmail-view"
+    readonly property string viewerQml: Quickshell.env("HOME") + "/.local/share/dankmail-viewer/mailview.qml"
+    property int viewerSeq: 0
+    property int _viewerSlot: 0
+    property string _viewerPointer: ""
     property var currentThread: null       // full thread (with messages) shown in the popup's detail panel
     property int selectedId: -1
     property int pageSize: 25
@@ -113,6 +122,29 @@ RippleButton {
         currentThread = null;
         _threadReqId = call("threads.get", { "id": id });
         call("threads.previewOpened", { "id": id });
+        rawHtml = ({});
+        fetchHtml(id, false);
+    }
+    // Fetch the original HTML of the thread's newest received message: rendered in place by the detail panel,
+    // or (forViewer) shown in the Chromium viewer window (viewer/mailview.qml), started on first use and reused after
+    function fetchHtml(threadId, forViewer) {
+        if (!cmdSocket.connected) return;
+        _htmlForViewer = forViewer;
+        _htmlReqId = call("messages.getHtml", { "threadId": threadId });
+    }
+    function showInViewer(result) {
+        const esc = t => (t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const body = result.html ? result.html
+            : '<pre style="white-space:pre-wrap;font:14px sans-serif;margin:16px;color:#222">' + esc(result.text) + '</pre>';
+        const slot = _viewerSlot; _viewerSlot = 1 - _viewerSlot;
+        const file = slot === 0 ? htmlFile0 : htmlFile1;
+        viewerSeq++;
+        _viewerPointer = file.path + "\n" + (result.subject || "Mail").replace(/\n/g, " ") + "\n" + viewerSeq;
+        file.setText('<!doctype html><meta charset="utf-8"><base target="_blank">' + body);
+    }
+    function _viewerFileSaved() {
+        ptrFile.setText(_viewerPointer);
+        if (!viewerProc.running) viewerProc.running = true;
     }
     function closeThread() { selectedId = -1; currentThread = null; _threadReqId = -1; }
     function updateFresh() {
@@ -144,6 +176,14 @@ RippleButton {
             olderDone = !msg.result.next || Object.keys(msg.result.next).length === 0;
             if (msg.result.ingested > 0) { limit += pageSize; localExhausted = false; refresh(); }
             else if (!olderDone) loadMore();   // empty window: keep walking back
+            return;
+        }
+        if (msg.id === _htmlReqId) {
+            _htmlReqId = -1;
+            if (msg.result) {
+                if (_htmlForViewer) showInViewer(msg.result);
+                else if (msg.result.html) { const r = {}; r[msg.result.messageId] = msg.result.html; rawHtml = r; }
+            }
             return;
         }
         if (msg.id in _syncReqs) {
@@ -195,7 +235,7 @@ RippleButton {
         else { popupOpen = !popupOpen; if (popupOpen) { limit = pageSize; markSeen(); refresh(); } else closeThread(); }
     }
 
-    Component.onCompleted: cmdSocket.connected = true
+    Component.onCompleted: { Quickshell.execDetached(["mkdir", "-p", viewerDir]); cmdSocket.connected = true; }
 
     // Per-account "last viewed" times, so a chip can show a dot for mail that arrived since
     FileView {
@@ -205,6 +245,16 @@ RippleButton {
         onLoaded: { try { root.lastSeen = JSON.parse(text()) || {}; } catch (e) { root.lastSeen = {}; } loaded = true; root.refresh(); }
         onLoadFailed: { loaded = true; root.refresh(); }   // first run: no file yet
     }
+
+    Process {
+        id: viewerProc
+        command: ["qml6", root.viewerQml, root.viewerDir + "/current"]
+        environment: ({ "QML_XHR_ALLOW_FILE_READ": "1" })
+        onRunningChanged: if (!running) Quickshell.execDetached(["bash", "-c", "rm -f '" + root.viewerDir + "'/msg-*.html '" + root.viewerDir + "/current'"])
+    }
+    FileView { id: htmlFile0; path: root.viewerDir + "/msg-0.html"; atomicWrites: true; onSaved: root._viewerFileSaved() }
+    FileView { id: htmlFile1; path: root.viewerDir + "/msg-1.html"; atomicWrites: true; onSaved: root._viewerFileSaved() }
+    FileView { id: ptrFile; path: root.viewerDir + "/current"; atomicWrites: true }
 
     Socket {
         id: cmdSocket

@@ -59,6 +59,7 @@ Rectangle {
                   iconColor: detail.thread && detail.thread.starred ? "#f5b942" : Appearance.colors.colOnLayer1
                   onClicked: detail.store.op(detail.thread.starred ? "ops.unstar" : "ops.star", detail.thread.id) }
             Act { visible: !!detail.thread; sym: "reply"; tip: "Reply in Dank Mail"; onClicked: detail.store.call("ui.replyThread", { "id": detail.thread.id }) }
+            Act { visible: !!detail.thread; sym: "web"; tip: "Full view (browser window)"; onClicked: detail.store.fetchHtml(detail.thread.id, true) }
             Act { visible: !!detail.thread; sym: "open_in_new"; tip: "Open in webmail"; onClicked: detail.store.call("ui.openLink", { "id": detail.thread.id }) }
             Act { sym: "close"; tip: "Close"; onClicked: detail.closeRequested() }
         }
@@ -89,7 +90,8 @@ Rectangle {
                 required property int index
                 width: messages.width
                 spacing: 0
-                readonly property string html: BodyFormatter.format(modelData.bodyText || modelData.snippet || "", {
+                readonly property string original: detail.store.rawHtml[modelData.id] || ""
+                readonly property string html: original !== "" ? BodyFormatter.cleanHtml(original, Math.max(200, Math.floor(messages.width - 30))) : BodyFormatter.format(modelData.bodyText || modelData.snippet || "", {
                     "linkColor": String(Appearance.colors.colPrimary),
                     "quoteColor": String(Appearance.colors.colSubtext)
                 })

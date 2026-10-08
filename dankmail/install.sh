@@ -8,6 +8,7 @@ BACKUP="$HOME/backups/dankmail/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$Q/services/TrayService.qml" "$BACKUP/"
 for f in MailButton MailPopup MailRow MailMenu MailDetail; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
 for f in "$REPO"/icons/*.svg; do install -Dm644 "$f" "$Q/assets/icons/mail/$(basename "$f")"; done
+install -Dm644 "$REPO/viewer/mailview.qml" "$HOME/.local/share/dankmail-viewer/mailview.qml"
 install -Dm644 "$REPO/MailBody.js" "$Q/modules/ii/bar/MailBody.js"
 install -Dm755 "$REPO/dankmail-toggle.sh" "$HOME/.config/hypr/custom/dankmail-toggle.sh"
 install -Dm755 "$REPO/dankmail-compose.sh" "$HOME/.config/hypr/custom/dankmail-compose.sh"

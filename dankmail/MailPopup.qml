@@ -15,7 +15,7 @@ LazyLoader {
     required property var store          // MailButton: threads/unread/view/syncing + op()/call()/setView()/syncNow()
     property bool open: false
     property real popupHeight: 0         // 0 = auto; set by dragging a bottom edge (list or detail panel)
-    property real detailWidth: 480       // resizable via the detail panel's right-edge handle
+    property real detailWidth: 620       // resizable via the detail panel's right-edge handle
     property Item hoverTarget
     signal closeRequested()
 
