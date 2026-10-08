@@ -12,6 +12,8 @@ LazyLoader {
     id: root
     required property var store          // MailButton: threads/unread/view/syncing + op()/call()/setView()/syncNow()
     property bool open: false
+    property real popupHeight: 0         // 0 = auto; set by dragging a bottom edge (list or detail panel)
+    property real detailWidth: 480       // resizable via the detail panel's right-edge handle
     property Item hoverTarget
     signal closeRequested()
 
@@ -22,9 +24,11 @@ LazyLoader {
         color: "transparent"
         anchors.left: true
         anchors.top: true
-        implicitWidth: 440 + Appearance.sizes.elevationMargin * 2
-        implicitHeight: Math.min(640, panel.implicitHeight) + Appearance.sizes.elevationMargin * 2
-        mask: Region { item: panel }
+        readonly property bool detailOpen: root.store.selectedId >= 0
+        readonly property int contentHeight: root.popupHeight > 0 ? root.popupHeight : Math.max(Math.min(640, panel.implicitHeight), detailOpen ? 560 : 0)
+        implicitWidth: 440 + (detailOpen ? 8 + root.detailWidth : 0) + Appearance.sizes.elevationMargin * 2
+        implicitHeight: contentHeight + Appearance.sizes.elevationMargin * 2
+        mask: Region { item: wrap }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         margins {
@@ -40,17 +44,67 @@ LazyLoader {
             onCleared: root.closeRequested()
         }
 
+        Item {
+            id: wrap  // input region: list panel plus the detail panel when open
+            anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: Appearance.sizes.elevationMargin }
+            width: 440 + (popupWindow.detailOpen ? 8 + root.detailWidth : 0)
+        }
+
         StyledRectangularShadow { target: panel }
+        StyledRectangularShadow { target: detail; visible: detail.visible }
+
+        MailDetail {
+            id: detail
+            visible: popupWindow.detailOpen
+            store: root.store
+            anchors { left: panel.right; top: parent.top; bottom: parent.bottom; right: parent.right; leftMargin: 8; topMargin: Appearance.sizes.elevationMargin; bottomMargin: Appearance.sizes.elevationMargin; rightMargin: Appearance.sizes.elevationMargin }
+            onCloseRequested: root.store.closeThread()
+
+            MouseArea {  // resize handle (right edge); incremental deltas stay stable while the window grows under the cursor
+                anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+                width: 8
+                cursorShape: Qt.SizeHorCursor
+                property real pressX
+                onPressed: mouse => pressX = mouse.x
+                onPositionChanged: mouse => {
+                    if (pressed) root.detailWidth = Math.max(320, Math.min(900, root.detailWidth + mouse.x - pressX));
+                }
+            }
+
+            MouseArea {  // resize handle (bottom edge)
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 8
+                cursorShape: Qt.SizeVerCursor
+                property real pressY
+                onPressed: mouse => pressY = mouse.y
+                onPositionChanged: mouse => {
+                    if (pressed) root.popupHeight = Math.max(240, Math.min(1100, popupWindow.contentHeight + mouse.y - pressY));
+                }
+            }
+        }
 
         Rectangle {
             id: panel
-            anchors { fill: parent; margins: Appearance.sizes.elevationMargin }
+            anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: Appearance.sizes.elevationMargin; topMargin: Appearance.sizes.elevationMargin; bottomMargin: Appearance.sizes.elevationMargin }
+            width: 440
             implicitHeight: header.implicitHeight + (listArea.implicitHeight) + 20
             color: Appearance.m3colors.m3surfaceContainer
             radius: Appearance.rounding.normal
             border.width: 1
             border.color: Appearance.colors.colLayer0Border
             clip: true
+
+            MouseArea {  // resize handle (bottom edge)
+                z: 10
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 8
+                cursorShape: Qt.SizeVerCursor
+                property real pressY
+                onPressed: mouse => pressY = mouse.y
+                onPositionChanged: mouse => {
+                    if (pressed) root.popupHeight = Math.max(240, Math.min(1100, popupWindow.contentHeight + mouse.y - pressY));
+                }
+            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -129,7 +183,7 @@ LazyLoader {
                         model: root.store.threads
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
-                        delegate: MailRow { width: list.width; store: root.store; onOpened: root.closeRequested() }
+                        delegate: MailRow { width: list.width; store: root.store }
                     }
                 }
             }

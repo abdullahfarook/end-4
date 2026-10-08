@@ -5,8 +5,18 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/dankmail/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$BACKUP/"
-for f in MailButton MailPopup MailRow MailMenu; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
+mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$Q/services/TrayService.qml" "$BACKUP/"
+for f in MailButton MailPopup MailRow MailMenu MailDetail; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
+install -Dm644 "$REPO/MailBody.js" "$Q/modules/ii/bar/MailBody.js"
+# The mail button replaces dankmail's own tray icon: hide it from the right-hand tray.
+python3 - "$Q/services/TrayService.qml" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if "dank ?mail" not in s:
+    s = s.replace("SystemTray.items.values.filter(i => (", "SystemTray.items.values.filter(i => (!/dank ?mail/.test(`${i.id} ${i.title}`.toLowerCase()) && ")
+    s = s.replace("(!/dank ?mail/.test(`${i.id} ${i.title}`.toLowerCase()) && ", "(!/dank ?mail/.test(`${i.id} ${i.title}`.toLowerCase()) && ")
+    open(p, "w").write(s)
+PY
 python3 - "$BAR" "$KEYBINDS" "$REPO/dankmail-keybinds.lua" <<'PY'
 import re, sys
 bar, kb, snippet = sys.argv[1], sys.argv[2], open(sys.argv[3]).read().rstrip("\n")

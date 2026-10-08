@@ -10,6 +10,7 @@ Item {
     required property var modelData
     required property var store
     signal opened()
+    readonly property bool selected: store.selectedId === modelData.id
     implicitHeight: 78
 
     readonly property string sender: {
@@ -31,10 +32,10 @@ Item {
     }
     Rectangle {
         anchors.fill: parent
-        color: hover.hovered ? Appearance.colors.colLayer1Hover : "transparent"
+        color: row.selected ? Appearance.colors.colLayer1Active : hover.hovered ? Appearance.colors.colLayer1Hover : "transparent"
     }
     HoverHandler { id: hover }
-    TapHandler { onTapped: { row.store.call("ui.showThread", { "id": modelData.id }); row.opened(); } }
+    TapHandler { onTapped: { row.store.selectThread(modelData.id); row.opened(); } }
 
     RowLayout {
         anchors { fill: parent; leftMargin: 14; rightMargin: 12; topMargin: 8; bottomMargin: 8 }

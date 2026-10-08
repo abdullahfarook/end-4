@@ -23,6 +23,9 @@ RippleButton {
     property int _statusReqId: -1
     property int _threadsReqId: -1
     property int _syncReqId: -1
+    property int _threadReqId: -1
+    property var currentThread: null       // full thread (with messages) shown in the popup's detail panel
+    property int selectedId: -1
 
     implicitWidth: icon.implicitWidth + buttonPadding * 2
     implicitHeight: icon.implicitHeight + buttonPadding * 2
@@ -46,6 +49,7 @@ RippleButton {
     function refresh() {
         if (!cmdSocket.connected) return;
         _statusReqId = call("system.status", {});
+        if (selectedId >= 0) _threadReqId = call("threads.get", { "id": selectedId });
         _threadsReqId = call("threads.list", { "inbox": view !== "starred", "starred": view === "starred", "limit": view === "unread" ? 60 : 25 });
     }
     function op(method, id) { call(method, { "ids": [id] }); }
@@ -56,10 +60,20 @@ RippleButton {
         syncGuard.restart();
         _syncReqId = call("system.sync", {});
     }
+    function selectThread(id) {
+        if (id === selectedId) { closeThread(); return; }
+        selectedId = id;
+        currentThread = null;
+        _threadReqId = call("threads.get", { "id": id });
+        call("threads.previewOpened", { "id": id });
+    }
+    function closeThread() { selectedId = -1; currentThread = null; _threadReqId = -1; }
     function setView(v) { view = v; refresh(); }
     function handleResponse(msg) {
         if (msg.id === _syncReqId) { syncing = false; syncGuard.stop(); }
+        if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
         if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
+        if (msg.id === _threadReqId && msg.result) { if (msg.result.id === selectedId) currentThread = msg.result; return; }
         if (msg.id === _statusReqId && msg.result) {
             unread = msg.result.unread || 0;
             dnd = !!msg.result.dnd;
@@ -69,7 +83,7 @@ RippleButton {
     }
     function clearState() {
         unread = 0; dnd = false; threads = []; syncing = false; requestError = "";
-        _statusReqId = -1; _threadsReqId = -1; _syncReqId = -1;
+        _statusReqId = -1; _threadsReqId = -1; _syncReqId = -1; closeThread();
         syncGuard.stop();
     }
 
@@ -80,7 +94,7 @@ RippleButton {
     middleClickAction: () => toggleApp()       // middle click
     onClicked: {
         if (!daemonConnected) toggleApp();
-        else { popupOpen = !popupOpen; if (popupOpen) refresh(); }
+        else { popupOpen = !popupOpen; if (popupOpen) refresh(); else closeThread(); }
     }
 
     Component.onCompleted: cmdSocket.connected = true
@@ -171,6 +185,6 @@ RippleButton {
         store: root
         open: root.popupOpen
         hoverTarget: root
-        onCloseRequested: root.popupOpen = false
+        onCloseRequested: { root.popupOpen = false; root.closeThread(); }
     }
 }
