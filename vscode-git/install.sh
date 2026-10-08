@@ -12,7 +12,7 @@ cp "$REPO/settings.json" "$D/User/settings.json"; cp "$REPO/keybindings.json" "$
 python3 "$REPO/build-vsix.py"
 code --user-data-dir "$D" --extensions-dir "$D/extensions" --install-extension "$REPO/gitpanel.vsix" --force >/dev/null 2>&1 || echo "extension install failed"
 [ -e "$D/ws/git-panel.code-workspace" ] || cp "$REPO/ws.template.json" "$D/ws/git-panel.code-workspace"
-if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/vscode-git.patch" >/dev/null 2>&1; then echo "QML patch already applied."
+if grep -q "VscodeGitButton {" "$Q/modules/ii/bar/BarContent.qml"; then echo "QML patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/vscode-git.patch" && echo "QML patch applied (restart the shell)."; fi
 install -Dm644 "$REPO/VscodeGitButton.qml" "$Q/modules/ii/bar/VscodeGitButton.qml"
 for f in vscode-git.sh vscode-git-watch.sh vscode-git-clickaway.sh vscode-git-hide.sh vscode-git-close.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done

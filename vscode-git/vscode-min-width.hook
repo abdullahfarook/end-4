@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = visual-studio-code-bin
+
+[Action]
+Description = Re-applying the narrow-window patch to VS Code (vscode-git panel)...
+When = PostTransaction
+Exec = /bin/sh /usr/local/share/vscode-git/patch-min-width.sh

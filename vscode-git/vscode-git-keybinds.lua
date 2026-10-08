@@ -4,8 +4,8 @@ hl.bind("SUPER + Z", hl.dsp.exec_cmd("~/.config/hypr/custom/vscode-git.sh"), { d
 local vg = { title = "⎇" }
 hl.window_rule({ match = vg, float = true })
 hl.window_rule({ match = vg, workspace = "special:vgit" })
-hl.window_rule({ match = vg, size = { "(monitor_w*0.4)", "(monitor_h-80)" } })
-hl.window_rule({ match = vg, move = { 12, 60 } })
+hl.window_rule({ match = vg, size = { 392, "(monitor_h-83)" } })
+hl.window_rule({ match = vg, move = { 6, 46 } })
 hl.window_rule({ match = vg, animation = "slide left" })
 hl.window_rule({ match = vg, rounding = 20 })
 hl.workspace_rule({ workspace = "special:vgit", gaps_out = 12 })
