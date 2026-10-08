@@ -17,7 +17,7 @@ RippleButton {
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
     property bool openedByClick: false  // background only when opened via this button, not via shortcuts
-    toggled: openedByClick && GlobalStates.overviewOpen
+    toggled: false  // style never changes after a click
     colBackgroundToggled: Appearance.colors.colPrimary
     colBackgroundToggledHover: Appearance.colors.colPrimaryHover
 
@@ -36,16 +36,25 @@ RippleButton {
         function onOverviewOpenChanged() { if (!GlobalStates.overviewOpen) root.openedByClick = false }
     }
 
-    Image {
+    Rectangle {  // filled disc with the bold magnifier cut out in the bar colour
         anchors.centerIn: parent
-        width: 16; height: 16
-        sourceSize: Qt.size(64, 64)
-        source: Quickshell.shellPath("assets/icons/bar-search/search.svg")
-        fillMode: Image.PreserveAspectFit
-        layer.enabled: true     // tint the white glyph with the icon colour
-        layer.effect: MultiEffect {
-            colorization: 1
-            colorizationColor: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer0
+        width: 20; height: 20; radius: 10
+        antialiasing: true
+        color: Appearance.colors.colOnLayer0
+        Image {
+            anchors.centerIn: parent
+            width: 16; height: 16
+            sourceSize: Qt.size(256, 256)
+            source: Quickshell.shellPath("assets/icons/bar-search/search.svg")
+            fillMode: Image.PreserveAspectFit
+            smooth: true; mipmap: true; antialiasing: true
+            layer.enabled: true     // tint the white glyph
+            layer.smooth: true
+            layer.samples: 4
+            layer.effect: MultiEffect {
+                colorization: 1
+                colorizationColor: Appearance.colors.colLayer0
+            }
         }
     }
 }
