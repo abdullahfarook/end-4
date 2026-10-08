@@ -21,6 +21,8 @@ RippleButton {
     colRipple: Appearance.colors.colLayer1Active
 
     readonly property var trayItem: SystemTray.items.values.find(i => `${i.id} ${i.title}`.toLowerCase().includes("teams")) ?? null
+    // Teams counts as running while it has a window (it is always docked on special:teams) or a tray entry; otherwise the icon dims
+    readonly property bool running: trayItem !== null || HyprlandData.windowList.some(w => w.class === "teams-for-linux")
     readonly property int unread: {
         let n = 0;
         for (const w of HyprlandData.windowList) {
@@ -74,6 +76,7 @@ RippleButton {
         text: "forum"
         iconSize: 20
         color: Appearance.colors.colOnLayer0
+        opacity: root.running ? 1 : 0.4
     }
     Rectangle {  // unread dot, same as the mail button
         visible: root.unread > 0

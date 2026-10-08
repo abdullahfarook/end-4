@@ -10,6 +10,7 @@ for f in MailButton MailPopup MailRow MailMenu MailDetail; do install -Dm644 "$R
 for f in "$REPO"/icons/*.svg; do install -Dm644 "$f" "$Q/assets/icons/mail/$(basename "$f")"; done
 install -Dm644 "$REPO/MailBody.js" "$Q/modules/ii/bar/MailBody.js"
 install -Dm755 "$REPO/dankmail-toggle.sh" "$HOME/.config/hypr/custom/dankmail-toggle.sh"
+install -Dm755 "$REPO/dankmail-compose.sh" "$HOME/.config/hypr/custom/dankmail-compose.sh"
 # The mail button replaces dankmail's own tray icon: hide it from the right-hand tray.
 python3 - "$Q/services/TrayService.qml" <<'PY'
 import sys

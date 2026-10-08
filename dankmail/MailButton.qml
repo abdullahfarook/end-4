@@ -20,7 +20,7 @@ RippleButton {
     property string requestError: ""
     property bool popupOpen: false
     property var accounts: []              // [{ id, type, email, unread, ... }] from accounts.list
-    property string accountFilter: ""      // "" = all accounts, else an account id
+    property string accountFilter: ""      // "" = all accounts, else an account id; kept while the shell runs, reset to All on restart
     property int _accountsReqId: -1
     property var lastSeen: ({})            // accountId -> ISO time you last viewed that account's chip with the popup open
     property var newest: ({})              // accountId -> lastMessageAt of its newest unread thread
@@ -49,9 +49,25 @@ RippleButton {
 
     readonly property string socketPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/dankmail.sock"
 
+    // Loader line under the icon while the daemon is starting or the app window is opening
+    property bool starting: false
+    readonly property bool busy: starting || openProc.running
+    onDaemonConnectedChanged: if (daemonConnected) { starting = false; startGuard.stop(); }
+    Process { id: openProc; command: ["bash", "-c", "$HOME/.config/hypr/custom/dankmail-toggle.sh"] }
+    Timer { id: startGuard; interval: 30000; onTriggered: root.starting = false }
+    Timer { interval: 1000; repeat: true; running: root.starting; onTriggered: { cmdSocket.connected = false; cmdSocket.connected = true; } }  // reconnect fast while starting
     function toggleApp() {
-        if (daemonConnected) Quickshell.execDetached(["bash", "-c", "$HOME/.config/hypr/custom/dankmail-toggle.sh"]);
-        else Quickshell.execDetached(["systemctl", "--user", "start", "dmail"]);
+        if (daemonConnected) { if (!openProc.running) openProc.running = true; }
+        else if (!starting) {
+            starting = true; startGuard.restart();
+            Quickshell.execDetached(["systemctl", "--user", "start", "dmail"]);
+        }
+    }
+    // "Stop dankmail completely": react at once (close the popup, drop the connection so the icon dims) instead of waiting for the socket to notice
+    function stopDaemon() {
+        popupOpen = false; closeThread();
+        cmdSocket.connected = false;          // -> daemonConnected = false, state cleared, reconnect timer armed
+        Quickshell.execDetached(["systemctl", "--user", "stop", "dmail"]);  // not "dmail kill": that exits non-zero and systemd (Restart=on-failure) revives it
     }
     function send(sock, obj) { sock.write(JSON.stringify(obj) + "\n"); sock.flush(); }
     function call(method, params) {
@@ -108,7 +124,7 @@ RippleButton {
         seenStore.setText(JSON.stringify(ls));
         updateFresh();
     }
-    function setAccount(id) { accountFilter = id; markSeen(); accountStore.setText(id); limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
+    function setAccount(id) { accountFilter = id; markSeen(); limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
     function setView(v) { view = v; limit = pageSize; localExhausted = false; refresh(); }
     function handleResponse(msg) {
         if (msg.id === _olderReqId) {
@@ -156,7 +172,7 @@ RippleButton {
     }
 
     altAction: () => {                         // right click: menu
-        if (menuLoader.active && menuLoader.item && typeof menuLoader.item.close === "function") menuLoader.item.close();
+        if (menuLoader.active) menuLoader.active = false;
         else menuLoader.active = true;
     }
     middleClickAction: () => toggleApp()       // middle click
@@ -166,13 +182,6 @@ RippleButton {
     }
 
     Component.onCompleted: cmdSocket.connected = true
-
-    // Remembers the selected account across restarts (empty file / unknown id = all accounts)
-    FileView {
-        id: accountStore
-        path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/quickshell/user/dankmail-account"
-        onLoaded: { const id = text().trim(); if (id !== "" && id !== root.accountFilter) { root.accountFilter = id; root.refresh(); } }
-    }
 
     // Per-account "last viewed" times, so a chip can show a dot for mail that arrived since
     FileView {
@@ -243,18 +252,30 @@ RippleButton {
         color: root.dnd ? Appearance.colors.colOutline : Appearance.colors.colPrimary
     }
 
+    Item {  // indeterminate loader line below the icon (same as the Teams button)
+        id: loader
+        visible: root.busy
+        anchors { bottom: parent.bottom; bottomMargin: 2; horizontalCenter: parent.horizontalCenter }
+        width: parent.width - 12; height: 2
+        clip: true
+        Rectangle { anchors.fill: parent; radius: 1; color: Appearance.colors.colOnLayer0; opacity: 0.2 }
+        Rectangle {
+            id: runner
+            height: parent.height; width: parent.width * 0.4; radius: 1
+            color: Appearance.colors.colPrimary
+            SequentialAnimation on x {
+                running: loader.visible; loops: Animation.Infinite
+                NumberAnimation { from: -runner.width; to: loader.width; duration: 900; easing.type: Easing.InOutQuad }
+            }
+        }
+    }
+
     Loader {
         id: menuLoader
         active: false
         sourceComponent: MailMenu {
             store: root
-            Component.onCompleted: this.open()
-            anchor {
-                window: root.QsWindow.window
-                item: root
-                gravity: Config.options.bar.vertical ? (Config.options.bar.bottom ? Edges.Left : Edges.Right) : (Config.options.bar.bottom ? Edges.Top : Edges.Bottom)
-                edges: Config.options.bar.vertical ? (Config.options.bar.bottom ? Edges.Left : Edges.Right) : (Config.options.bar.bottom ? Edges.Top : Edges.Bottom)
-            }
+            hoverTarget: root
             onMenuClosed: menuLoader.active = false
         }
     }
