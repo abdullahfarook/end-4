@@ -166,6 +166,52 @@ LazyLoader {
                     }
                 }
 
+                // Account switcher (only when more than one account is connected): one row of equal chips
+                RowLayout {
+                    visible: root.store.accounts.length > 1
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 12; Layout.rightMargin: 12; Layout.bottomMargin: 10
+                    spacing: 6
+                    Repeater {
+                        model: [{ "id": "", "label": "All", "icon": "inbox", "logo": "", "unread": 0, "email": "All accounts" }].concat(root.store.accounts.map(a => ({ "id": a.id, "label": a.email.split("@")[0], "logo": a.type === "gmail" ? "gmail" : (a.type === "microsoft" || /(outlook|hotmail|live|msn)\./i.test(a.email)) ? "outlook" : "mail", "unread": a.unread || 0, "email": a.email })))
+                        delegate: RippleButton {
+                            id: chip
+                            required property var modelData
+                            Layout.preferredWidth: chip.modelData.unread > 0 ? 72 : 44
+                            implicitHeight: 32
+                            buttonRadius: 16
+                            toggled: root.store.accountFilter === modelData.id
+                            onClicked: root.store.setAccount(modelData.id)
+                            readonly property color fg: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 5
+                                MaterialSymbol { visible: chip.modelData.logo === ""; text: chip.modelData.icon; iconSize: 20; color: chip.fg }
+                                Image {
+                                    visible: chip.modelData.logo !== ""
+                                    source: visible ? Quickshell.shellPath("assets/icons/mail/" + chip.modelData.logo + ".svg") : ""
+                                    sourceSize: Qt.size(40, 40)
+                                    Layout.preferredWidth: 20; Layout.preferredHeight: 20
+                                    fillMode: Image.PreserveAspectFit
+                                }
+                                Rectangle {
+                                    visible: chip.modelData.unread > 0
+                                    implicitWidth: badge.implicitWidth + 10; implicitHeight: 16; radius: 8
+                                    color: chip.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
+                                    StyledText {
+                                        id: badge
+                                        anchors.centerIn: parent
+                                        text: chip.modelData.unread
+                                        font.pixelSize: 10
+                                        color: chip.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnPrimary
+                                    }
+                                }
+                            }
+                            StyledToolTip { text: chip.modelData.email }
+                        }
+                    }
+                }
+
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border }
 
                 Item {

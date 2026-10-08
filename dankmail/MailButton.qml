@@ -19,6 +19,9 @@ RippleButton {
     property bool syncing: false
     property string requestError: ""
     property bool popupOpen: false
+    property var accounts: []              // [{ id, type, email, unread, ... }] from accounts.list
+    property string accountFilter: ""      // "" = all accounts, else an account id
+    property int _accountsReqId: -1
     property int _reqId: 0
     property int _statusReqId: -1
     property int _threadsReqId: -1
@@ -56,8 +59,9 @@ RippleButton {
     function refresh() {
         if (!cmdSocket.connected) return;
         _statusReqId = call("system.status", {});
+        _accountsReqId = call("accounts.list", {});
         if (selectedId >= 0) _threadReqId = call("threads.get", { "id": selectedId });
-        _threadsReqId = call("threads.list", { "inbox": view !== "starred", "starred": view === "starred", "unread": view === "unread", "limit": limit });
+        _threadsReqId = call("threads.list", { "inbox": view !== "starred", "starred": view === "starred", "unread": view === "unread", "limit": limit, "account": accountFilter });
     }
     // Scrolled to the bottom: first reveal more of the local cache, then pull an older month from the server.
     function loadMore() {
@@ -84,6 +88,7 @@ RippleButton {
         call("threads.previewOpened", { "id": id });
     }
     function closeThread() { selectedId = -1; currentThread = null; _threadReqId = -1; }
+    function setAccount(id) { accountFilter = id; limit = pageSize; localExhausted = false; olderNext = null; olderDone = false; closeThread(); refresh(); }
     function setView(v) { view = v; limit = pageSize; localExhausted = false; refresh(); }
     function handleResponse(msg) {
         if (msg.id === _olderReqId) {
@@ -99,7 +104,10 @@ RippleButton {
         if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
         if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
         if (msg.id === _threadReqId && msg.result) { if (msg.result.id === selectedId) currentThread = msg.result; return; }
-        if (msg.id === _statusReqId && msg.result) {
+        if (msg.id === _accountsReqId && msg.result) {
+            accounts = msg.result.accounts || msg.result;
+            if (accountFilter !== "" && !accounts.some(a => a.id === accountFilter)) accountFilter = "";
+        } else if (msg.id === _statusReqId && msg.result) {
             unread = msg.result.unread || 0;
             dnd = !!msg.result.dnd;
         } else if (msg.id === _threadsReqId && Array.isArray(msg.result)) {
