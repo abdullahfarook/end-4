@@ -34,5 +34,8 @@ else
         claude) cmd='f="$HOME/repos/end-4/claude/shell.md"; set -- ; [ -r "$f" ] && set -- --append-system-prompt-file "$f"; claude --continue "$@" || exec claude "$@"' ;;
         codex)  cmd='codex resume --last || exec codex' ;;
     esac
+    # Scrub Claude Code's own env: if this script was run from inside a claude session (tests, tools), kitty would
+    # carry CLAUDE_CODE_CHILD_SESSION/SESSION_ID forever and every sidebar claude would start with transcript saving off
+    for v in $(compgen -e | grep -E '^(CLAUDE_CODE_|CLAUDECODE$)'); do unset "$v"; done
     nohup kitty --class ai-sidebar --title "$title" -d "$HOME" sh -c "$cmd" >/dev/null 2>&1 9>&- &
 fi
