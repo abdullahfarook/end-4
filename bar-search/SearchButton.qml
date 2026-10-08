@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Effects
+import Quickshell
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
@@ -18,10 +20,16 @@ RippleButton {
 
     onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
 
-    MaterialSymbol {
+    Image {
         anchors.centerIn: parent
-        text: "search"
-        iconSize: 16
-        color: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+        width: 16; height: 16
+        sourceSize: Qt.size(64, 64)
+        source: Quickshell.shellPath("assets/icons/bar-search/search.svg")
+        fillMode: Image.PreserveAspectFit
+        layer.enabled: true     // tint the white glyph with the icon colour
+        layer.effect: MultiEffect {
+            colorization: 1
+            colorizationColor: root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+        }
     }
 }

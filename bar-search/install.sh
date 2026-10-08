@@ -5,6 +5,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/bar-search/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$BAR" "$BACKUP/"
+install -Dm644 "$REPO/search.svg" "$Q/assets/icons/bar-search/search.svg"
 install -Dm644 "$REPO/SearchButton.qml" "$Q/modules/ii/bar/SearchButton.qml"
 python3 - "$BAR" <<'PY'
 import re, sys
