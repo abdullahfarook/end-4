@@ -114,6 +114,14 @@ function cleanHtml(h, width) {
     h = h.replace(/<!--[\s\S]*?-->/g, "");
     h = h.replace(/<(head|style|script|title|svg|noscript)\b[\s\S]*?<\/\1>/gi, "");
     h = h.replace(/<\/?(html|body|center|font|span|section|article|header|footer|main|nav|form|label)\b[^>]*>/gi, "");
+    // Keep CSS-declared image widths (style="width:24px") before styles are stripped; without any width the image keeps its natural size.
+    h = h.replace(/<img\b[^>]*?>/gi, tag => {
+        if (/\swidth="?\d/i.test(tag)) return tag;
+        const m = tag.match(/\bstyle="(?:[^"]*[\s;])?width:\s*(\d+)px/i);
+        if (m) return tag.replace(/<img/i, '<img width="' + m[1] + '"');
+        const pc = tag.match(/\bstyle="(?:[^"]*[\s;])?width:\s*(\d+)%/i);
+        return pc ? tag.replace(/<img/i, '<img width="' + Math.round(width * pc[1] / 100) + '"') : tag;
+    });
     h = h.replace(/\s(class|id|role|aria-[a-z]+|data-[a-z-]+|dir|lang|valign|border|bgcolor|cellpadding|cellspacing|align|height|style)="[^"]*"/gi, "");
     h = h.replace(/<table\b[^>]*>/gi, '<table width="100%" cellspacing="0" cellpadding="4">');
     h = h.replace(/<(td|th)\b[^>]*>/gi, "<$1>");
@@ -121,7 +129,8 @@ function cleanHtml(h, width) {
         const src = tag.match(/\bsrc="([^"]+)"/i);
         if (!src || !/^https?:/i.test(src[1])) return "";
         const wm = tag.match(/\bwidth="?(\d+)/i);
-        const w = wm ? Math.min(parseInt(wm[1]), width) : width;
+        if (!wm) return '<img src="' + src[1] + '">';  // natural size (e.g. small icons)
+        const w = Math.min(parseInt(wm[1]), width);
         return w <= 3 ? "" : '<img src="' + src[1] + '" width="' + w + '">';
     });
     h = h.replace(/<div\b[^>]*>/gi, "<p>").replace(/<\/div>/gi, "</p>");
