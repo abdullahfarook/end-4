@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Toggles the left AI sidebar. Backend comes from ai.sidebarBackend in the illogical-impulse config:
 #   native -> the shell's own Intelligence sidebar
-#   claude / codex -> a kitty window running that CLI on the "ai" special workspace
+#   claude / codex / antigravity -> a kitty window running that CLI on the "ai" special workspace
 date +%s%3N > "${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar-toggled"  # lets the click-away handler ignore the click that caused this toggle
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar.lock"; flock 9
 backend=$(jq -r '.ai.sidebarBackend // "native"' "$HOME/.config/illogical-impulse/config.json" 2>/dev/null)
-if [ "$backend" != claude ] && [ "$backend" != codex ]; then
+if [ "$backend" != claude ] && [ "$backend" != codex ] && [ "$backend" != antigravity ]; then
     exec hyprctl dispatch 'hl.dsp.global("quickshell:sidebarLeftToggle")'
 fi
 # Window title carries the backend so a changed setting replaces a stale window
@@ -34,6 +34,8 @@ else
     case $backend in
         claude) cmd='f="$HOME/repos/end-4/claude/shell.md"; set -- ; [ -r "$f" ] && set -- --append-system-prompt-file "$f"; claude --continue "$@" || exec claude "$@"' ;;
         codex)  cmd='codex resume --last || exec codex' ;;
+        # agy has no system-prompt flag: a new conversation gets the same standing instructions as its first prompt
+        antigravity) cmd='f="$HOME/repos/end-4/claude/shell.md"; agy --continue || { [ -r "$f" ] && exec agy -i "$(cat "$f")"; exec agy; }' ;;
     esac
     # Scrub Claude Code's own env: if this script was run from inside a claude session (tests, tools), kitty would
     # carry CLAUDE_CODE_CHILD_SESSION/SESSION_ID forever and every sidebar claude would start with transcript saving off

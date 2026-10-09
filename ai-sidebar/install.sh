@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the optional Claude/Codex AI sidebar: setting in Settings -> Services -> AI, keybinds, script (idempotent).
+# Installs the optional Claude/Codex/Antigravity AI sidebar: setting in Settings -> Services -> AI, keybinds, script (idempotent).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"
@@ -18,6 +18,18 @@ if grep -q stopMenu "$Q/modules/ii/bar/LeftSidebarButton.qml" 2>/dev/null; then 
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop.patch" && echo "Stop-menu patch applied."; fi
 if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/ai-sidebar-stop-dismiss.patch" >/dev/null 2>&1; then echo "Stop-menu dismiss patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/ai-sidebar-stop-dismiss.patch" && echo "Stop-menu dismiss patch applied."; fi
+# Antigravity option in the settings selector (after Codex, first occurrence only; idempotent)
+python3 - "$Q/modules/settings/ServicesConfig.qml" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if 'value: "antigravity"' not in s:
+    old = '                    value: "codex"\n                }\n'
+    new = ('                    value: "codex"\n                },\n                {\n'
+           '                    displayName: "Antigravity",\n                    icon: "terminal",\n'
+           '                    value: "antigravity"\n                }\n')
+    i = s.index(old); s = s[:i] + new + s[i + len(old):]
+    open(p, "w").write(s); print("Antigravity option added (restart the shell).")
+PY
 for f in ai-sidebar-stop.sh ai-sidebar.sh ai-sidebar-watch.sh ai-sidebar-clickaway.sh ai-sidebar-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 python3 - "$KEYBINDS" "$REPO/ai-sidebar-keybinds.lua" <<'PY'
 import re, sys
