@@ -11,3 +11,4 @@ for f in $(find . -type f | sed 's|^\./||'); do
     cp "$f" "$TARGET/$f"
 done
 echo "Installed (backup: $BACKUP). Restart shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
+mkdir -p "$HOME/.local/bin"; cp "$REPO/launch-bg.sh" "$HOME/.local/bin/launch-bg"; chmod +x "$HOME/.local/bin/launch-bg"

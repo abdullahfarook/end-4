@@ -232,8 +232,8 @@ diff -ruN a/services/AppSearch.qml files/services/AppSearch.qml
  
      function iconExists(iconName) {
 diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
---- a/services/LauncherSearch.qml	2026-10-08 06:35:23.476941521 +0500
-+++ files/services/LauncherSearch.qml	2026-10-08 06:35:23.464352810 +0500
+--- a/services/LauncherSearch.qml
++++ files/services/LauncherSearch.qml
 @@ -146,9 +146,70 @@
                  expr = expr.slice(Config.options.search.prefix.math.length);
              }
@@ -305,7 +305,7 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
      Process {
          id: mathProc
          property list<string> baseCommand: ["qalc", "-t"]
-@@ -164,11 +225,51 @@
+@@ -164,11 +225,52 @@
          }
      }
  
@@ -329,6 +329,7 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
 +                }
 +            },
 +            comment: entry.comment,
++            command: entry.runInTerminal ? ["bash", "-c", `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`] : entry.command,
 +            runInTerminal: entry.runInTerminal,
 +            genericName: entry.genericName,
 +            keywords: entry.keywords,
@@ -358,7 +359,7 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
  
          ///////////// Special cases ///////////////
          if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
-@@ -239,42 +340,7 @@
+@@ -239,42 +341,7 @@
                  Quickshell.clipboardText = root.mathResult;
              }
          });
@@ -402,7 +403,7 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
          const commandResultObject = resultComp.createObject(null, {
              name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
              verb: Translation.tr("Run"),
-@@ -343,16 +409,17 @@
+@@ -343,16 +410,17 @@
          ////////// Launcher actions ////////////
          result = result.concat(launcherActionObjects);
  

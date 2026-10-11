@@ -20,6 +20,8 @@ QtObject {
         print("Not implemented");
     }
     property var actions: []
+    // Launch command argv for apps, used to open on another workspace
+    property var command: []
     
     // Stuff needed for DesktopEntry 
     property string id: ""

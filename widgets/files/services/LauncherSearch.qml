@@ -245,6 +245,7 @@ Singleton {
                 }
             },
             comment: entry.comment,
+            command: entry.runInTerminal ? ["bash", "-c", `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(entry.command.join(' '))}'`] : entry.command,
             runInTerminal: entry.runInTerminal,
             genericName: entry.genericName,
             keywords: entry.keywords,

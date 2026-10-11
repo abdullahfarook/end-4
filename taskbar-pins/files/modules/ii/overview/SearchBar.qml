@@ -92,6 +92,13 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
+            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier)) {
+                const first = appResults.itemAtIndex(0);
+                if (first && first.activate)
+                    first.activate(true);
+                event.accepted = true;
+                return;
+            }
             if (event.key === Qt.Key_Tab) {
                 if (LauncherSearch.results.length === 0) return;
                 const tabbedText = LauncherSearch.results[0].name;
