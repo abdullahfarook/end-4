@@ -171,17 +171,31 @@ Rectangle {
             }
             Component {
                 id: textSlot
-                Text {
+                TextEdit {  // read-only but selectable/copyable (mouse drag, double/triple click, Ctrl+C)
+                    id: bodyText
                     property var seg: ({})
-                    text: seg.html
-                    textFormat: Text.RichText
-                    wrapMode: Text.Wrap
+                    text: "<style>a { color: " + Appearance.colors.colPrimary + "; }</style>" + (seg.html || "")
+                    textFormat: TextEdit.RichText
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.Wrap
                     renderType: Text.NativeRendering  // cheaper to scroll than outline-tessellated glyphs
                     font.family: Appearance.font.family.main
                     font.pixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnLayer1
-                    linkColor: Appearance.colors.colPrimary
+                    selectionColor: Appearance.colors.colPrimary
+                    selectedTextColor: Appearance.colors.colOnPrimary
                     onLinkActivated: link => Qt.openUrlExternally(link)
+                    HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor }
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        onTapped: ctxMenu.popup()
+                    }
+                    Menu {
+                        id: ctxMenu
+                        MenuItem { text: qsTr("Copy"); enabled: bodyText.selectedText !== ""; onTriggered: bodyText.copy() }
+                        MenuItem { text: qsTr("Select all"); onTriggered: bodyText.selectAll() }
+                    }
                 }
             }
             delegate: ColumnLayout {
