@@ -4,22 +4,24 @@
 # Undo: reinstall visual-studio-code-bin, or restore the backups from ~/backups/vscode-minwidth/.
 set -eu
 python3 - <<'PY'
-import sys
+import sys, re
 out = "/usr/share/code/resources/app/out/"
-for f, old, new in [("mainImpl.js", "xw={WIDTH:400,", "xw={WIDTH:215,"),
-                    # ...and maximum 392 too: the sidebar is exactly the Git panel's width, extra window width always goes to the editor
-                    ("vs/workbench/workbench.desktop.main.js", "N.SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g);this.minimumWidth=392;this.maximumWidth=Number.POSITIVE_INFINITY;", "N.SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g);this.minimumWidth=392;this.maximumWidth=392;"),
-                    # sidebar minimum width 170 -> 392 (the Git panel's width): an opening editor then cannot squeeze the sidebar; it only grows into the widened window
-                    ("vs/workbench/workbench.desktop.main.js", "$q.Viewlets,N.SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g);this.minimumWidth=170;", "$q.Viewlets,N.SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g);this.minimumWidth=392;"),
-                    # minimum editor width 220 -> 1: opening a file must not squeeze the sidebar before the window widens
-                    ("vs/workbench/workbench.desktop.main.js", "var PM=new Li(220,70),", "var PM=new Li(1,70),"),
-                    # hiding the editor area must not force the bottom panel open (sidebar-only Git panel)
-                    ("vs/workbench/workbench.desktop.main.js", 'e&&!this.isVisible("workbench.parts.panel")&&!this.isAuxiliaryBarMaximized()&&this.setPanelHidden(!1,!0))}getLayoutClasses', '0)}getLayoutClasses'),
-                    ("vs/workbench/workbench.desktop.main.js", "$0e={WIDTH:400,WIDTH_WITH_VERTICAL_PANEL:600,", "$0e={WIDTH:215,WIDTH_WITH_VERTICAL_PANEL:600,")]:
+W = "vs/workbench/workbench.desktop.main.js"
+# (file, regex, replacement, regex that matches when already patched). Minified identifiers change between releases, so they are wildcards.
+for f, old, new, done in [
+        ("mainImpl.js", r"(=\{WIDTH:)400(,)", r"\g<1>215\2", r"=\{WIDTH:215,"),
+        # sidebar minimum width 170 -> 392 (the Git panel's width) and maximum 392 too: extra window width always goes to the editor, and an opening editor cannot squeeze the sidebar
+        (W, r"(SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g\);this\.minimumWidth=)170;this\.maximumWidth=Number\.POSITIVE_INFINITY;", r"\g<1>392;this.maximumWidth=392;", r"SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g\);this\.minimumWidth=392;this\.maximumWidth=392;"),
+        # minimum editor width 220 -> 1: opening a file must not squeeze the sidebar before the window widens
+        (W, r"(var [\w$]+=new [\w$]+\()220(,70\),)", r"\g<1>1\2", r"var [\w$]+=new [\w$]+\(1,70\),"),
+        # hiding the editor area must not force the bottom panel open (sidebar-only Git panel)
+        (W, r'e&&!this\.isVisible\("workbench\.parts\.panel"\)&&!this\.isAuxiliaryBarMaximized\(\)&&this\.setPanelHidden\(!1,!0\)\)\}getLayoutClasses', "0)}getLayoutClasses", r"0\)\}getLayoutClasses"),
+        (W, r"(=\{WIDTH:)400(,WIDTH_WITH_VERTICAL_PANEL:600,)", r"\g<1>215\2", r"=\{WIDTH:215,WIDTH_WITH_VERTICAL_PANEL:600,")]:
     s = open(out + f, encoding="utf-8").read()
-    if new in s: continue
-    if s.count(old) != 1: sys.exit(f"patch-min-width: pattern not found exactly once in {f} (VS Code changed?)")
-    open(out + f, "w", encoding="utf-8").write(s.replace(old, new))
+    if re.search(done, s): continue
+    s, n = re.subn(old, new, s)
+    if n != 1: sys.exit(f"patch-min-width: pattern {old[:40]!r} matched {n} times in {f} (VS Code changed?)")
+    open(out + f, "w", encoding="utf-8").write(s)
 import base64, hashlib, re
 # VS Code warns "installation appears to be corrupt" when a checksummed file changes: refresh the stored checksum.
 pj = "/usr/share/code/resources/app/product.json"
