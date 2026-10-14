@@ -232,8 +232,8 @@ diff -ruN a/services/AppSearch.qml files/services/AppSearch.qml
  
      function iconExists(iconName) {
 diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
---- a/services/LauncherSearch.qml
-+++ files/services/LauncherSearch.qml
+--- a/services/LauncherSearch.qml	2026-10-15 01:44:10.641457212 +0500
++++ files/services/LauncherSearch.qml	2026-10-15 01:44:10.642826132 +0500
 @@ -146,9 +146,70 @@
                  expr = expr.slice(Config.options.search.prefix.math.length);
              }
@@ -359,7 +359,16 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
  
          ///////////// Special cases ///////////////
          if (root.query.startsWith(Config.options.search.prefix.clipboard)) {
-@@ -239,42 +341,7 @@
+@@ -188,6 +290,8 @@
+                     type: type,
+                     execute: () => {
+                         Cliphist.copy(entry);
++                        // Also paste into the previously focused window once the launcher has closed
++                        Quickshell.execDetached(["bash", "-c", `sleep 0.25; ${Cliphist.pressPasteCommand}`]);
+                     },
+                     actions: [resultComp.createObject(null, {
+                             name: Translation.tr("Copy"),
+@@ -239,42 +343,7 @@
                  Quickshell.clipboardText = root.mathResult;
              }
          });
@@ -403,7 +412,7 @@ diff -ruN a/services/LauncherSearch.qml files/services/LauncherSearch.qml
          const commandResultObject = resultComp.createObject(null, {
              name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
              verb: Translation.tr("Run"),
-@@ -343,16 +410,17 @@
+@@ -343,16 +412,17 @@
          ////////// Launcher actions ////////////
          result = result.concat(launcherActionObjects);
  

@@ -290,6 +290,8 @@ Singleton {
                     type: type,
                     execute: () => {
                         Cliphist.copy(entry);
+                        // Also paste into the previously focused window once the launcher has closed
+                        Quickshell.execDetached(["bash", "-c", `sleep 0.25; ${Cliphist.pressPasteCommand}`]);
                     },
                     actions: [resultComp.createObject(null, {
                             name: Translation.tr("Copy"),
