@@ -17,6 +17,9 @@ ShellRoot {
         "org.kde.okular", "org.kde.gwenview", "org.kde.ark", "org.kde.kcalc", "org.kde.spectacle",
         "org.kde.discover", "systemsettings", "pavucontrol", "nm-connection-editor", "org.gnome.nautilus"]
     property var wins: []
+    // per-window horizontal offset of the handle/drawer (dragged by the user), keyed by window address
+    property var offsets: ({})
+    function setOffset(addr, v) { const o = Object.assign({}, offsets); o[addr] = v; offsets = o }
 
     // --- grip drag: the window follows the cursor over an overview-style workspace grid (2 rows x 5) ---
     property string dragAddr: ""
@@ -123,13 +126,21 @@ ShellRoot {
             readonly property int sw: 108   // fixed surface size: never resizes, so hover can't flicker
             readonly property int sh: 38
             margins {
-                left: modelData.at[0] - (mon ? mon.x : 0) + (modelData.size[0] - sw) / 2
+                left: modelData.at[0] - (mon ? mon.x : 0) + (modelData.size[0] - sw) / 2 + (root.offsets[modelData.address] || 0)
                 top: modelData.at[1] - (mon ? mon.y : 0)
             }
             implicitWidth: sw; implicitHeight: sh
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay   // above fullscreen/maximized windows too
             WlrLayershell.namespace: "quickshell:closebutton"
+
+            // slide the handle/drawer left/right along the window's top edge (stays inside the window)
+            property real pressX: 0
+            function slideBy(dx) {
+                const lim = Math.max(0, (modelData.size[0] - sw) / 2)
+                const cur = root.offsets[modelData.address] || 0
+                root.setOffset(modelData.address, Math.max(-lim, Math.min(lim, cur + dx)))
+            }
 
             // only the tab (idle) or the drawer (open) takes input; the rest of the surface is click-through
             mask: Region { item: win.open ? drawer : tab }
@@ -149,6 +160,11 @@ ShellRoot {
                     width: parent.width; height: 4; y: -2
                     radius: 2; color: "#b3e8e8ee"
                 }
+                MouseArea {
+                    anchors.fill: parent; cursorShape: Qt.SizeHorCursor; preventStealing: true
+                    onPressed: mouse => win.pressX = mouse.x
+                    onPositionChanged: mouse => { if (pressed) win.slideBy(mouse.x - win.pressX) }
+                }
             }
 
             // drawer: slides down from the window's top edge, rounded at the bottom only
@@ -162,6 +178,13 @@ ShellRoot {
                 radius: 16; color: "#ff17171c"
                 border.width: 1; border.color: "#14ffffff"
                 clip: true
+
+                // empty drawer area (around the buttons) also slides it left/right
+                MouseArea {
+                    anchors.fill: parent; cursorShape: Qt.SizeHorCursor; preventStealing: true
+                    onPressed: mouse => win.pressX = mouse.x
+                    onPositionChanged: mouse => { if (pressed) win.slideBy(mouse.x - win.pressX) }
+                }
 
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter; y: 20; spacing: 6
