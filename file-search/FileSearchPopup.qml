@@ -19,8 +19,42 @@ PopupWindow {
     property bool indexing: false
     property bool searching: false
     property int current: 0
+    property string sortKey: "relevance"   // relevance | name | type | size | date
+    property string sortDir: ""            // "" = default order for the key | "asc" | "desc"
+    // Effective direction: explicit choice, else the key's natural default (name/type A→Z, size/date big/new first)
+    readonly property bool sortAsc: sortDir !== "" ? sortDir === "asc" : (sortKey === "relevance" || sortKey === "name" || sortKey === "type")
+    property bool sortMenuOpen: false
+    property bool helpOpen: false
+    property real sortMenuX: 0
+    property real sortMenuY: 0
+    readonly property var sortDefs: [
+        { key: "relevance", label: Translation.tr("Best match"), icon: "auto_awesome" },
+        { key: "name", label: Translation.tr("Name"), icon: "sort_by_alpha" },
+        { key: "type", label: Translation.tr("Type"), icon: "folder" },
+        { key: "size", label: Translation.tr("Size"), icon: "straighten" },
+        { key: "date", label: Translation.tr("Date"), icon: "schedule" },
+    ]
+    readonly property string sortLabel: sortDefs.find(d => d.key === sortKey).label
+    readonly property var sortedResults: {
+        const r = results.slice();
+        if (sortKey === "relevance") return sortDir === "desc" ? r.reverse() : r;
+        const nm = x => x.path.split("/").pop().toLowerCase();
+        const dirFirst = x => x.kind === "dir" ? 0 : 1;
+        const cmp = {
+            name: (a, b) => nm(a).localeCompare(nm(b), undefined, { numeric: true }),
+            type: (a, b) => dirFirst(a) - dirFirst(b) || nm(a).localeCompare(nm(b), undefined, { numeric: true }),
+            size: (a, b) => (a.kind === "dir" ? -1 : a.size) - (b.kind === "dir" ? -1 : b.size),
+            date: (a, b) => a.mtime - b.mtime,
+        }[sortKey];
+        r.sort((a, b) => sortAsc ? cmp(a, b) : cmp(b, a));
+        return r;
+    }
+    function setSort(k) {
+        sortKey = k; sortDir = "";
+        current = 0;
+    }
     readonly property string home: Quickshell.env("HOME")
-    readonly property string idxFile: `${Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp"}/file-search-${scope}.idx`
+    readonly property string idxFile: `${Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp"}/file-search2-${scope}.idx`
 
     anchor.window: target.QsWindow.window
     anchor.onAnchoring: {
@@ -51,7 +85,7 @@ PopupWindow {
             'fd --hidden --follow --type f --type d --absolute-path ' +
             '--exclude .git --exclude node_modules --exclude .cache --exclude .cargo --exclude .rustup ' +
             '--exclude __pycache__ --exclude proc --exclude sys --exclude dev --exclude run ' +
-            '. "$base" > "$idx.tmp" 2>/dev/null; mv -f "$idx.tmp" "$idx"',
+            '. "$base" 2>/dev/null | awk -F/ \'{n=$NF; if(n=="")n=$(NF-1); print n"\\t"$0}\' > "$idx.tmp"; mv -f "$idx.tmp" "$idx"',
             "_", idxFile, scope === "home" ? home : "/"];
         indexProc.running = true;
     }
@@ -62,7 +96,9 @@ PopupWindow {
         searching = true;
         searchProc.command = ["bash", "-c",
             '[ -s "$1" ] || exit 0; ' +
-            'fzf --filter "$2" --scheme=path < "$1" 2>/dev/null | head -60 | ' +
+            // Like Everything: match the file name only, unless the query contains "/" (then match the whole path)
+            'if [[ "$2" == */* ]]; then nth="1,2"; else nth="1"; fi; ' +
+            'fzf --filter "$2" --delimiter $\'\\t\' --nth "$nth" --tiebreak=length,index < "$1" 2>/dev/null | head -1500 | cut -f2- | ' +
             'xargs -d "\\n" -r stat --printf "%F\\t%s\\t%Y\\t%n\\n" 2>/dev/null',
             "_", idxFile, q];
         searchProc.running = true;
@@ -142,8 +178,9 @@ PopupWindow {
     Rectangle {
         id: card
         anchors.centerIn: parent
-        implicitWidth: 640
-        implicitHeight: 460
+        // Same size as the mail widget: 440 wide, full screen height minus bar / bottom gap
+        implicitWidth: 440
+        implicitHeight: (root.target.QsWindow.window?.screen?.height ?? 1080) - 20 - Appearance.sizes.barHeight - Appearance.sizes.elevationMargin
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.normal
         border.width: 1
@@ -175,11 +212,11 @@ PopupWindow {
                             font.pixelSize: Appearance.font.pixelSize.normal
                             clip: true
                             onTextChanged: { root.query = text; debounce.restart() }
-                            Keys.onEscapePressed: { if (root.menuItem) root.menuItem = null; else root.visible = false }
-                            Keys.onDownPressed: root.current = Math.min(root.current + 1, root.results.length - 1)
+                            Keys.onEscapePressed: { if (root.menuItem) root.menuItem = null; else if (root.helpOpen) root.helpOpen = false; else if (root.sortMenuOpen) root.sortMenuOpen = false; else root.visible = false }
+                            Keys.onDownPressed: root.current = Math.min(root.current + 1, root.sortedResults.length - 1)
                             Keys.onUpPressed: root.current = Math.max(root.current - 1, 0)
                             Keys.onReturnPressed: event => {
-                                const it = root.results[root.current];
+                                const it = root.sortedResults[root.current];
                                 if (!it) return;
                                 if (event.modifiers & Qt.ControlModifier) root.revealPath(it); else root.openPath(it.path);
                             }
@@ -189,6 +226,20 @@ PopupWindow {
                                 text: Translation.tr("Search files and folders…")
                                 color: Appearance.colors.colSubtext
                             }
+                        }
+                        RippleButton {
+                            implicitWidth: 28; implicitHeight: 28
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: root.helpOpen ? Appearance.colors.colSecondaryContainer : "transparent"
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            onClicked: { root.helpOpen = !root.helpOpen; input.forceActiveFocus() }
+                            contentItem: MaterialSymbol {
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "help"
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: root.helpOpen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                            }
+                            StyledToolTip { text: Translation.tr("Search tips"); visible: parent.hovered }
                         }
                         MaterialSymbol {
                             visible: root.indexing || root.searching
@@ -200,7 +251,26 @@ PopupWindow {
                     }
                 }
                 RippleButton {
-                    implicitHeight: 40; implicitWidth: scopeRow.implicitWidth + 24
+                    id: sortBtn
+                    implicitHeight: 40
+                    implicitWidth: 40
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: {
+                        const p = mapToItem(card, 0, height + 4);
+                        root.sortMenuX = p.x; root.sortMenuY = p.y; root.sortMenuOpen = !root.sortMenuOpen;
+                    }
+                    contentItem: MaterialSymbol {
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.sortDir === "" ? "swap_vert" : root.sortDir === "asc" ? "arrow_upward" : "arrow_downward"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: root.sortDir === "" && root.sortKey === "relevance" ? Appearance.colors.colOnLayer2 : Appearance.colors.colPrimary
+                    }
+                    StyledToolTip { text: Translation.tr("Sort: %1 (%2)").arg(root.sortLabel).arg(root.sortDir === "" ? Translation.tr("default order") : root.sortDir === "asc" ? Translation.tr("ascending") : Translation.tr("descending")); visible: sortBtn.hovered }
+                }
+                RippleButton {
+                    implicitHeight: 40; implicitWidth: 40
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
@@ -209,9 +279,8 @@ PopupWindow {
                         id: scopeRow
                         spacing: 6
                         MaterialSymbol { text: root.scope === "home" ? "home" : "computer"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnLayer2 }
-                        StyledText { text: root.scope === "home" ? Translation.tr("Home") : Translation.tr("System"); color: Appearance.colors.colOnLayer2 }
                     }
-                    StyledToolTip { text: Translation.tr("Toggle search scope: home / whole system"); visible: parent.hovered }
+                    StyledToolTip { text: root.scope === "home" ? Translation.tr("Searching home: click for whole system") : Translation.tr("Searching whole system: click for home"); visible: parent.hovered }
                 }
             }
 
@@ -223,7 +292,7 @@ PopupWindow {
                 Layout.fillHeight: true
                 clip: true
                 spacing: 4
-                model: root.results
+                model: root.sortedResults
                 currentIndex: root.current
                 boundsBehavior: Flickable.StopAtBounds
                 onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
@@ -292,24 +361,208 @@ PopupWindow {
                     }
                 }
 
-                StyledText {
+                // Empty / loading / no-match states
+                ColumnLayout {
+                    id: emptyState
                     anchors.centerIn: parent
-                    visible: root.results.length === 0
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Appearance.colors.colSubtext
-                    width: parent.width - 40
-                    wrapMode: Text.Wrap
-                    text: root.query.trim() === "" ? Translation.tr("Type to search. Fuzzy matching: \"cfgnv\" finds config/nvim.lua")
-                        : (root.indexing || root.searching) ? Translation.tr("Searching…") : Translation.tr("No matches")
+                    visible: root.sortedResults.length === 0
+                    width: parent.width - 48
+                    spacing: 6
+                    readonly property bool idle: root.query.trim() === ""
+                    readonly property bool busy: !idle && (root.indexing || root.searching)
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        implicitWidth: 72; implicitHeight: 72; radius: 36
+                        color: Appearance.colors.colSecondaryContainer
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: emptyState.idle ? "manage_search" : emptyState.busy ? "hourglass_top" : "search_off"
+                            iconSize: 36
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                    }
+                    StyledText {
+                        visible: !emptyState.idle
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 8
+                        text: emptyState.busy ? (root.indexing ? Translation.tr("Indexing files…") : Translation.tr("Searching…"))
+                            : Translation.tr("No results")
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colOnLayer2
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: emptyState.idle ? Translation.tr("Type a name or part of a path")
+                            : emptyState.busy ? ""
+                            : root.scope === "home"
+                                ? Translation.tr("Try different words, or search the whole system")
+                                : Translation.tr("Try different words")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                    }
+                    RippleButton {
+                        visible: emptyState.idle
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 10
+                        implicitHeight: 32
+                        implicitWidth: tipsRow.implicitWidth + 24
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: root.helpOpen = true
+                        contentItem: RowLayout {
+                            id: tipsRow
+                            spacing: 6
+                            MaterialSymbol { text: "lightbulb"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colPrimary }
+                            StyledText { text: Translation.tr("Search tips"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colOnLayer2 }
+                        }
+                    }
                 }
             }
 
             StyledText {
                 Layout.fillWidth: true
-                text: Translation.tr("Enter open · Ctrl+Enter show in folder · right-click menu · ↑↓ move · Esc close")
+                text: (root.sortedResults.length > 0 ? Translation.tr("%1 results · ").arg(root.sortedResults.length) : "") + Translation.tr("Enter open · Ctrl+Enter show in folder · right-click menu")
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 color: Appearance.colors.colSubtext
                 horizontalAlignment: Text.AlignHCenter
+            }
+        }
+
+        // Search tips overlay (explains what can be typed into the field)
+        MouseArea {
+            anchors.fill: parent
+            visible: root.helpOpen
+            onPressed: root.helpOpen = false
+        }
+        Rectangle {
+            visible: root.helpOpen
+            x: 12
+            y: 60
+            width: card.width - 24
+            implicitHeight: tipsCol.implicitHeight + 20
+            radius: Appearance.rounding.normal
+            color: Appearance.m3colors.m3surfaceContainerHigh
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            ColumnLayout {
+                id: tipsCol
+                anchors { fill: parent; margins: 10 }
+                spacing: 2
+                StyledText {
+                    Layout.leftMargin: 6
+                    Layout.bottomMargin: 4
+                    text: Translation.tr("Search tips")
+                    font.weight: Font.Medium
+                    color: Appearance.colors.colOnLayer2
+                }
+                Repeater {
+                    model: [
+                        { icon: "match_case", ex: "cfgnv", d: Translation.tr("Fuzzy: letters in order (config/nvim.lua)"), ins: "" },
+                        { icon: "join_inner", ex: "foo bar", d: Translation.tr("Both words must match"), ins: "" },
+                        { icon: "call_split", ex: "foo | bar", d: Translation.tr("Either word"), ins: " | " },
+                        { icon: "format_quote", ex: "'foo", d: Translation.tr("Exact match, no fuzziness"), ins: "'" },
+                        { icon: "start", ex: "^foo", d: Translation.tr("Starts with"), ins: "^" },
+                        { icon: "keyboard_tab", ex: "foo$", d: Translation.tr("Ends with (e.g. .png$)"), ins: "$" },
+                        { icon: "block", ex: "!foo", d: Translation.tr("Exclude matches"), ins: " !" },
+                    ]
+                    delegate: RippleButton {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 36
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: {
+                            if (modelData.ins !== "") { input.text = input.text + modelData.ins; input.cursorPosition = input.text.length; }
+                            root.helpOpen = false; input.forceActiveFocus();
+                        }
+                        contentItem: RowLayout {
+                            spacing: 10
+                            MaterialSymbol { Layout.leftMargin: 4; text: modelData.icon; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colSubtext }
+                            StyledText {
+                                Layout.preferredWidth: 78
+                                text: modelData.ex
+                                font.family: Appearance.font.family.monospace
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colPrimary
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: modelData.d
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                elide: Text.ElideRight
+                                color: Appearance.colors.colOnLayer2
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort menu (overlay inside the card)
+        MouseArea {
+            anchors.fill: parent
+            visible: root.sortMenuOpen
+            onPressed: root.sortMenuOpen = false
+        }
+        Rectangle {
+            visible: root.sortMenuOpen
+            x: Math.max(8, Math.min(root.sortMenuX, card.width - width - 8))
+            y: root.sortMenuY
+            implicitWidth: 200
+            implicitHeight: sortCol.implicitHeight + 12
+            radius: Appearance.rounding.small
+            color: Appearance.m3colors.m3surfaceContainerHigh
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            ColumnLayout {
+                id: sortCol
+                anchors { fill: parent; margins: 6 }
+                spacing: 0
+                Repeater {
+                    model: root.sortDefs
+                    delegate: RippleButton {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 34
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: { root.sortKey = modelData.key; root.sortDir = ""; root.current = 0; root.sortMenuOpen = false }
+                        contentItem: RowLayout {
+                            spacing: 10
+                            MaterialSymbol { Layout.leftMargin: 4; text: modelData.icon; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnLayer2 }
+                            StyledText { Layout.fillWidth: true; text: modelData.label; color: Appearance.colors.colOnLayer2 }
+                            MaterialSymbol { visible: root.sortKey === modelData.key; text: "check"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colPrimary }
+                        }
+                    }
+                }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border; opacity: 0.6 }
+                Repeater {
+                    model: [
+                        { dir: "asc", label: Translation.tr("Ascending"), icon: "arrow_upward" },
+                        { dir: "desc", label: Translation.tr("Descending"), icon: "arrow_downward" },
+                    ]
+                    delegate: RippleButton {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 34
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: { root.sortDir = root.sortDir === modelData.dir ? "" : modelData.dir; root.current = 0; root.sortMenuOpen = false }
+                        contentItem: RowLayout {
+                            spacing: 10
+                            MaterialSymbol { Layout.leftMargin: 4; text: modelData.icon; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnLayer2 }
+                            StyledText { Layout.fillWidth: true; text: modelData.label; color: Appearance.colors.colOnLayer2 }
+                            MaterialSymbol { visible: root.sortDir === modelData.dir; text: "check"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colPrimary }
+                        }
+                    }
+                }
             }
         }
 
