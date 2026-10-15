@@ -4,9 +4,9 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"
 BACKUP="$HOME/backups/fan-control/$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BACKUP"; cp "$Q/modules/ii/bar/UtilButtons.qml" "$BACKUP/"
+mkdir -p "$BACKUP"; cp "$Q/modules/ii/bar/UtilButtons.qml" "$BACKUP/"; cp "$Q/modules/ii/bar/PerformancePopup.qml" "$BACKUP/" 2>/dev/null || true
 echo "Backed up to $BACKUP"
-for f in fan-control.sh fan-restore.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
+for f in fan-control.sh fan-restore.sh cpu-freq.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 if patch -d "$Q" -p1 -R --dry-run -s -f < "$REPO/fan-control.patch" >/dev/null 2>&1; then echo "QML patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/fan-control.patch" && echo "QML patch applied (restart the shell)."; fi
 EXECS="$HOME/.config/hypr/custom/execs.lua"

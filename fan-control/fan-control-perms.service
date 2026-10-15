@@ -6,7 +6,7 @@ Wants=damx-daemon.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/sh -c 'for i in $(seq 30); do [ -e /sys/devices/platform/acer-wmi/nitro_sense/fan_speed ] && break; sleep 1; done; chgrp linuwu_sense /sys/devices/platform/acer-wmi/nitro_sense/fan_speed && chmod 664 /sys/devices/platform/acer-wmi/nitro_sense/fan_speed'
+ExecStart=/bin/sh -c 'for i in $(seq 30); do [ -e /sys/devices/platform/acer-wmi/nitro_sense/fan_speed ] && break; sleep 1; done; chgrp linuwu_sense /sys/devices/platform/acer-wmi/nitro_sense/fan_speed && chmod 664 /sys/devices/platform/acer-wmi/nitro_sense/fan_speed; for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq; do chgrp linuwu_sense $f; chmod 664 $f; done'
 
 [Install]
 WantedBy=multi-user.target

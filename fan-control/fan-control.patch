@@ -1,7 +1,6 @@
-diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/PerformancePopup.qml
---- a/modules/ii/bar/PerformancePopup.qml	1970-01-01 05:00:00.000000000 +0500
-+++ b/modules/ii/bar/PerformancePopup.qml	2026-10-05 17:06:13.163903952 +0500
-@@ -0,0 +1,136 @@
+--- a/modules/ii/bar/PerformancePopup.qml
++++ b/modules/ii/bar/PerformancePopup.qml
+@@ -0,0 +1,193 @@
 +import qs.services
 +import qs.modules.common
 +import qs.modules.common.functions
@@ -19,6 +18,11 @@ diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/Perfo
 +    property string fanMode: "auto"
 +    property int cpuFan: 50
 +    property int gpuFan: 50
++    property bool freqAuto: true
++    property int freqMHz: 4600
++    property int freqMin: 800
++    property int freqMax: 4600
++    readonly property string freqScript: FileUtils.trimFileProtocol(Directories.home) + "/.config/hypr/custom/cpu-freq.sh"
 +    readonly property string fanScript: FileUtils.trimFileProtocol(Directories.home) + "/.config/hypr/custom/fan-control.sh"
 +
 +    anchor.window: target.QsWindow.window
@@ -34,7 +38,7 @@ diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/Perfo
 +    implicitWidth: card.implicitWidth + 16
 +    implicitHeight: card.implicitHeight + 16
 +
-+    onVisibleChanged: if (visible) readState.running = true
++    onVisibleChanged: if (visible) { readState.running = true; readFreq.running = true }
 +
 +    Process {
 +        id: readState
@@ -48,6 +52,31 @@ diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/Perfo
 +                root.gpuFan = parseInt(p[2]);
 +            }
 +        }
++    }
++
++    Process {
++        id: readFreq
++        command: [root.freqScript, "get"]
++        stdout: StdioCollector {
++            onStreamFinished: {
++                const p = text.trim().split(" ");
++                if (p.length < 4) return;
++                root.freqMin = Math.round(parseInt(p[2]) / 100000) * 100;
++                root.freqMax = Math.round(parseInt(p[3]) / 100000) * 100;
++                root.freqAuto = p[0] === "auto";
++                root.freqMHz = root.freqAuto ? root.freqMax - 100 : Math.round(parseInt(p[1]) / 100000) * 100;
++            }
++        }
++    }
++    function setFreqAuto(auto) {
++        freqAuto = auto;
++        if (auto) Quickshell.execDetached([freqScript, "auto"]);
++        else commitFreq();
++    }
++    function commitFreq() {
++        if (freqAuto) return;
++        freqMHz = Math.min(freqMHz, freqMax - 100);
++        Quickshell.execDetached([freqScript, "set", `${freqMHz}`]);
 +    }
 +
 +    function setFan(mode) {
@@ -135,10 +164,36 @@ diff --color -ruN pa/modules/ii/bar/PerformancePopup.qml pb/modules/ii/bar/Perfo
 +            }
 +            FanSlider { label: "CPU"; value: root.cpuFan; onValueChanged: root.cpuFan = Math.round(value); onReleased: root.commitManual() }
 +            FanSlider { label: "GPU"; value: root.gpuFan; onValueChanged: root.gpuFan = Math.round(value); onReleased: root.commitManual() }
++
++            StyledText { Layout.topMargin: 4; text: Translation.tr("Max CPU frequency"); font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
++            RowLayout {
++                spacing: 8
++                StyledText { text: Translation.tr("Max"); Layout.preferredWidth: 32; color: Appearance.colors.colOnLayer1 }
++                StyledSlider {
++                    id: freqSlider
++                    Layout.fillWidth: true
++                    Layout.preferredWidth: 160
++                    from: root.freqMin; to: root.freqMax - 100; stepSize: 100
++                    enabled: !root.freqAuto
++                    opacity: enabled ? 1 : 0.5
++                    value: root.freqMHz
++                    onValueChanged: if (!root.freqAuto) root.freqMHz = Math.round(value)
++                    onPressedChanged: if (!pressed) root.commitFreq()
++                }
++                StyledText {
++                    text: root.freqAuto ? Translation.tr("Auto") : `${(root.freqMHz / 1000).toFixed(1)} GHz`
++                    Layout.preferredWidth: 56
++                    horizontalAlignment: Text.AlignRight
++                    color: Appearance.colors.colOnLayer1
++                }
++                StyledSwitch {
++                    checked: root.freqAuto
++                    onToggled: root.setFreqAuto(checked)
++                }
++            }
 +        }
 +    }
 +}
-diff --color -ruN pa/modules/ii/bar/UtilButtons.qml pb/modules/ii/bar/UtilButtons.qml
 --- a/modules/ii/bar/UtilButtons.qml	2026-10-05 16:59:31.238201721 +0500
 +++ b/modules/ii/bar/UtilButtons.qml	2026-10-05 16:59:31.239391520 +0500
 @@ -125,32 +125,29 @@
