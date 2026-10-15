@@ -21,6 +21,36 @@ Scope {
     property bool appsOpen: true
     property bool procsOpen: true
     property real appsH: 220
+    // Remembered across opens (and shell restarts): sort column/direction, section open state, divider position
+    readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/task-manager.json`
+    property bool stateReady: false
+    function saveState() {
+        if (!stateReady) return;
+        stateView.setText(JSON.stringify({ sortKey, sortAsc, appsOpen, procsOpen, appsH }));
+    }
+    onSortKeyChanged: saveState()
+    onSortAscChanged: saveState()
+    onAppsOpenChanged: saveState()
+    onProcsOpenChanged: saveState()
+    onAppsHChanged: saveState()
+    FileView {
+        id: stateView
+        path: root.stateFile
+        blockLoading: true
+        atomicWrites: true
+    }
+    Component.onCompleted: {
+        try {
+            const j = JSON.parse(stateView.text());
+            if (["name", "pid", "cpu", "mem"].includes(j.sortKey)) root.sortKey = j.sortKey;
+            if (typeof j.sortAsc === "boolean") root.sortAsc = j.sortAsc;
+            if (typeof j.appsOpen === "boolean") root.appsOpen = j.appsOpen;
+            if (typeof j.procsOpen === "boolean") root.procsOpen = j.procsOpen;
+            if (typeof j.appsH === "number") root.appsH = j.appsH;
+        } catch (e) {}
+        root.stateReady = true;
+        sample();
+    }
     function setSort(k) {
         if (sortKey === k) sortAsc = !sortAsc;
         else { sortKey = k; sortAsc = (k === "name" || k === "pid"); }
@@ -45,7 +75,6 @@ Scope {
     readonly property var filtered: sortAndFilter(procs)
     readonly property var filteredApps: sortAndFilter(apps)
 
-    Component.onCompleted: sample()
 
     function sample() { if (!topProc.running) topProc.running = true }
     function fmtMem(kib) {

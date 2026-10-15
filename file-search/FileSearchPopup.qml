@@ -58,9 +58,29 @@ Scope {
     readonly property string home: Quickshell.env("HOME")
     readonly property string idxFile: `${Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp"}/file-search2-${scope}.idx`
 
-    Component.onCompleted: buildIndex()
+    // Remembered across opens (and shell restarts): sort key/direction, Home/System scope and the search text (selected on open)
+    readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/file-search.json`
+    property bool stateReady: false
+    function saveState() {
+        if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query }));
+    }
+    onSortKeyChanged: saveState()
+    onSortDirChanged: saveState()
+    onQueryChanged: saveState()
+    FileView { id: stateView; path: root.stateFile; blockLoading: true; atomicWrites: true }
+    Component.onCompleted: {
+        try {
+            const j = JSON.parse(stateView.text());
+            if (sortDefs.some(d => d.key === j.sortKey)) root.sortKey = j.sortKey;
+            if (["", "asc", "desc"].includes(j.sortDir)) root.sortDir = j.sortDir;
+            if (j.scope === "home" || j.scope === "root") root.scope = j.scope;
+            if (typeof j.query === "string" && j.query !== "") { input.text = j.query; input.selectAll(); }
+        } catch (e) {}
+        root.stateReady = true;
+        buildIndex();
+    }
     onVisibleChanged: if (!visible) { indexProc.running = false; searchProc.running = false }
-    onScopeChanged: { results = []; buildIndex(); }
+    onScopeChanged: { saveState(); results = []; buildIndex(); }
 
     function buildIndex() {
         if (indexProc.running) return;
