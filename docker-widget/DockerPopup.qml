@@ -80,6 +80,11 @@ PopupWindow {
         }
     }
     Process {  // needs root: graphical polkit prompt
+        id: stopProc
+        command: ["pkexec", "systemctl", "stop", "docker.service", "docker.socket"]
+        onExited: { root.refresh(); refreshSoon.restart() }
+    }
+    Process {  // needs root: graphical polkit prompt
         id: startProc
         command: ["pkexec", "systemctl", "start", "docker.socket", "docker.service"]
         onExited: { root.refresh(); refreshSoon.restart() }
@@ -223,6 +228,12 @@ PopupWindow {
                 IconBtn {
                     visible: root.selected !== ""
                     symbol: "restart_alt"; tip: Translation.tr("Restart"); onClicked: root.act("restart")
+                }
+                IconBtn {
+                    visible: root.selected === "" && !root.daemonDown
+                    symbol: "power_settings_new"; tip: stopProc.running ? Translation.tr("Stopping…") : Translation.tr("Stop Docker")
+                    enabled: !stopProc.running
+                    onClicked: stopProc.running = true
                 }
                 IconBtn { visible: root.selected === ""; symbol: "refresh"; tip: Translation.tr("Refresh"); onClicked: root.refresh() }
             }
