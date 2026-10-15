@@ -48,6 +48,6 @@ toggle)
             sleep 0.1; hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null
         fi
     else
-        nohup kitty --class console-sidebar --title console-sidebar -d "$HOME" >/dev/null 2>&1 9>&- &
+        nohup kitty -o window_padding_width=0 -o window_margin_width=10 -o font_size=10 --class console-sidebar --title console-sidebar -d "$HOME" >/dev/null 2>&1 9>&- &
     fi ;;
 esac
