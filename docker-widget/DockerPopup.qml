@@ -159,8 +159,8 @@ PopupWindow {
     Rectangle {
         id: card
         anchors.centerIn: parent
-        implicitWidth: 560
-        implicitHeight: 460
+        implicitWidth: 440
+        implicitHeight: (root.target.QsWindow.window?.screen?.height ?? 1080) - 50
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.normal
         border.width: 1

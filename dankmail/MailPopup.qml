@@ -47,7 +47,7 @@ LazyLoader {
         anchors.top: true
         readonly property bool detailOpen: root.store.selectedId >= 0
         // Default: full screen height like the AI panel (panel ends 20px above the bottom); dragging a bottom edge overrides it
-        readonly property int fullHeight: (screen ? screen.height : 1080) - 20 - Appearance.sizes.barHeight - Appearance.sizes.elevationMargin
+        readonly property int fullHeight: (screen ? screen.height : 1080) - 50
         readonly property int contentHeight: root.popupHeight > 0 ? root.popupHeight : fullHeight
         implicitWidth: 440 + (detailOpen ? 8 + root.detailWidth : 0) + Appearance.sizes.elevationMargin * 2
         implicitHeight: contentHeight + Appearance.sizes.elevationMargin * 2
@@ -56,7 +56,7 @@ LazyLoader {
         exclusiveZone: 0
         margins {
             left: Math.max(4, root.QsWindow?.mapFromItem(root.hoverTarget, (root.hoverTarget.width - 440) / 2, 0).x ?? 4)
-            top: Appearance.sizes.barHeight
+            top: Appearance.sizes.barHeight - Appearance.sizes.elevationMargin + 5
         }
         WlrLayershell.namespace: "quickshell:popup"
         WlrLayershell.layer: WlrLayer.Overlay

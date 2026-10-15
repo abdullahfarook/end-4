@@ -180,7 +180,7 @@ PopupWindow {
         anchors.centerIn: parent
         // Same size as the mail widget: 440 wide, full screen height minus bar / bottom gap
         implicitWidth: 440
-        implicitHeight: (root.target.QsWindow.window?.screen?.height ?? 1080) - 20 - Appearance.sizes.barHeight - Appearance.sizes.elevationMargin
+        implicitHeight: (root.target.QsWindow.window?.screen?.height ?? 1080) - 50
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.normal
         border.width: 1
