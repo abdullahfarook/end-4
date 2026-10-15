@@ -38,7 +38,7 @@ PY
     w="address:$a"
     hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:vgit\", window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.float({ action = \"enable\", window = \"$w\" })" >/dev/null
-    hyprctl dispatch "hl.dsp.window.resize({ x = 392, y = $((mh - 83)), relative = false, window = \"$w\" })" >/dev/null
+    hyprctl dispatch "hl.dsp.window.resize({ x = 392, y = $((mh - 58)), relative = false, window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.move({ x = $((mx + 6)), y = $((my + 46)), relative = false, window = \"$w\" })" >/dev/null
     sleep 0.5
     # The title rule may already have revealed the panel: only toggle if it is not shown yet (else it would hide again)

@@ -6,12 +6,14 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 
 // Docker popup: container list with state, image, CPU/memory and ports; click a container for live logs
 // (follow/pause, copy, start/stop/restart). Polls only while visible.
-PopupWindow {
+Scope {
     id: root
     required property Item target
+    property bool visible: true
     property var containers: []        // [{id, name, image, state, status, ports, cpu, mem}]
     property var stats: ({})           // name -> {cpu, mem}
     property string error: ""
@@ -23,23 +25,8 @@ PopupWindow {
     property bool paused: false
     readonly property var current: containers.find(c => c.name === selected) ?? null
 
-    anchor.window: target.QsWindow.window
-    anchor.onAnchoring: {
-        const p = target.QsWindow.mapFromItem(target, 0, 0);
-        anchor.rect = Qt.rect(p.x, p.y, target.width, target.height);
-    }
-    anchor.edges: Config.options.bar.bottom ? Edges.Top : Edges.Bottom
-    anchor.gravity: anchor.edges === Edges.Top ? Edges.Top : Edges.Bottom
-    anchor.adjustment: PopupAdjustment.All
-    grabFocus: true
-    color: "transparent"
-    implicitWidth: card.implicitWidth + 16
-    implicitHeight: card.implicitHeight + 16
-
-    onVisibleChanged: {
-        if (visible) refresh();
-        else { selected = ""; logProc.running = false; }
-    }
+    Component.onCompleted: refresh()
+    onVisibleChanged: if (!visible) { selected = ""; logProc.running = false }
     onSelectedChanged: {
         logProc.running = false;
         logLines = []; follow = true; paused = false;
@@ -156,11 +143,40 @@ PopupWindow {
         StyledToolTip { text: ib.tip; visible: ib.hovered && ib.tip !== "" }
     }
 
+    // Same geometry as the left sidebar: top/left/bottom anchored below the bar, hyprland outer gap around the card.
+    // A click-away layer closes it (a click anywhere, including the bar button).
+    PanelWindow {
+        mask: Region { item: root.visible ? dismissArea : null }
+        color: "transparent"
+        anchors { left: true; right: true; top: true; bottom: true }
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
+        WlrLayershell.namespace: "quickshell:popup-dismiss"
+        WlrLayershell.layer: WlrLayer.Top
+        MouseArea { id: dismissArea; anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.visible = false }
+    }
+    PanelWindow {
+        id: win
+        color: "transparent"
+        anchors { top: true; left: true; bottom: true }
+        implicitWidth: 440 + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
+        mask: Region { item: card }
+        exclusionMode: ExclusionMode.Normal
+        exclusiveZone: 0
+        WlrLayershell.namespace: "quickshell:popup"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        StyledRectangularShadow { target: card }
+
     Rectangle {
         id: card
-        anchors.centerIn: parent
-        implicitWidth: 440
-        implicitHeight: (root.target.QsWindow.window?.screen?.height ?? 1080) - 50
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.topMargin: Appearance.sizes.hyprlandGapsOut
+        anchors.leftMargin: Appearance.sizes.hyprlandGapsOut
+        anchors.bottomMargin: Appearance.sizes.hyprlandGapsOut
+        width: 440
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.normal
         border.width: 1
@@ -444,5 +460,6 @@ PopupWindow {
                 }
             }
         }
+    }
     }
 }

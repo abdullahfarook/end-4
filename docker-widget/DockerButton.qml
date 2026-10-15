@@ -17,7 +17,8 @@ RippleButton {
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
-    onClicked: popup.visible = !popup.visible
+    property bool open: false
+    onClicked: open = !open
 
     Process {
         id: countProc
@@ -52,7 +53,7 @@ RippleButton {
     }
 
     // Right-click menu: Stop / Start Docker, below the button
-    altAction: () => { popup.visible = false; menu.visible = !menu.visible }
+    altAction: () => { open = false; menu.visible = !menu.visible }
     PopupWindow {
         id: menu
         visible: false
@@ -104,5 +105,12 @@ RippleButton {
         }
     }
 
-    DockerPopup { id: popup; target: root; visible: false }
+    // Popup is created only while open and unloaded on close
+    Loader {
+        active: root.open
+        sourceComponent: DockerPopup {
+            target: root
+            onVisibleChanged: if (!visible) root.open = false
+        }
+    }
 }

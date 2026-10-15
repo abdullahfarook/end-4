@@ -32,7 +32,7 @@ if [ "$ws" != "special:teams" ]; then
     w="address:$a"
     hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:teams\", window = \"$w\", follow = false })" >/dev/null
     hyprctl dispatch "hl.dsp.window.float({ action = \"enable\", window = \"$w\" })" >/dev/null
-    hyprctl dispatch "hl.dsp.window.resize({ x = $W, y = $((mh - 83)), relative = false, window = \"$w\" })" >/dev/null
+    hyprctl dispatch "hl.dsp.window.resize({ x = $W, y = $((mh - 58)), relative = false, window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.move({ x = $((mx + LEFT)), y = $((my + TOP)), relative = false, window = \"$w\" })" >/dev/null
     [ $dock = 1 ] && exit 0
     sleep 0.3

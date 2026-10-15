@@ -55,7 +55,7 @@ LazyLoader {
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         margins {
-            left: Math.max(4, root.QsWindow?.mapFromItem(root.hoverTarget, (root.hoverTarget.width - 440) / 2, 0).x ?? 4)
+            left: Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin   // card 5 px from the left edge, like the left sidebar / AI / Git panels
             top: Appearance.sizes.barHeight - Appearance.sizes.elevationMargin + 5
         }
         WlrLayershell.namespace: "quickshell:popup"

@@ -28,7 +28,7 @@ resize() {  # $1 address, $2 narrow|wide
     fi
     last=$now; mode=$2
     # fixed height/position (same as vscode-git.sh); Hyprland resizes around the centre, so place it again afterwards
-    hyprctl dispatch "hl.dsp.window.resize({ x = $target, y = $((mh - 83)), relative = false, window = \"address:$1\" })" >/dev/null
+    hyprctl dispatch "hl.dsp.window.resize({ x = $target, y = $((mh - 58)), relative = false, window = \"address:$1\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.move({ x = $((mx + 6)), y = $((my + 46)), relative = false, window = \"address:$1\" })" >/dev/null
 }
 socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
