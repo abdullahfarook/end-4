@@ -5,12 +5,14 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 
 // Task manager popup: process list (PID, CPU, RAM) sorted by CPU then RAM, filterable like the Search widget.
 // Samples `top` every 2 s while open. Instantiated by TaskManagerButton only while open.
-PopupWindow {
+Scope {
     id: root
     required property Item target
+    property bool visible: true
     property var procs: []             // [{pid, user, cpu, mem, name}]
     property var apps: []              // [{pid, name, title, cpu, mem}] one per window-owning process tree
     property string query: ""
@@ -43,21 +45,7 @@ PopupWindow {
     readonly property var filtered: sortAndFilter(procs)
     readonly property var filteredApps: sortAndFilter(apps)
 
-    anchor.window: target.QsWindow.window
-    anchor.onAnchoring: {
-        const p = target.QsWindow.mapFromItem(target, 0, 0);
-        anchor.rect = Qt.rect(p.x, p.y, target.width, target.height);
-    }
-    anchor.edges: Config.options.bar.bottom ? Edges.Top : Edges.Bottom
-    anchor.gravity: anchor.edges === Edges.Top ? Edges.Top : Edges.Bottom
-    anchor.adjustment: PopupAdjustment.All
-    grabFocus: true
-    color: "transparent"
-    implicitWidth: card.implicitWidth + 16
-    implicitHeight: card.implicitHeight + 16
-
-    Component.onCompleted: { sample(); input.forceActiveFocus() }
-    onVisibleChanged: if (visible) input.forceActiveFocus()
+    Component.onCompleted: sample()
 
     function sample() { if (!topProc.running) topProc.running = true }
     function fmtMem(kib) {
@@ -135,11 +123,43 @@ PopupWindow {
         }
     }
 
+    // Same geometry as the Mail widget: own layer window, left edge like the left sidebar, full height minus 50.
+    // A click-away layer closes it (a click anywhere, including the bar button).
+    PanelWindow {
+        mask: Region { item: root.visible ? dismissArea : null }
+        color: "transparent"
+        anchors { left: true; right: true; top: true; bottom: true }
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
+        WlrLayershell.namespace: "quickshell:popup-dismiss"
+        WlrLayershell.layer: WlrLayer.Top
+        MouseArea { id: dismissArea; anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.visible = false }
+    }
+    PanelWindow {
+        id: win
+        // Same geometry as the left sidebar: top/left/bottom anchored below the bar, hyprland outer gap around the card
+        color: "transparent"
+        anchors { top: true; left: true; bottom: true }
+        implicitWidth: 440 + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
+        mask: Region { item: card }
+        exclusionMode: ExclusionMode.Normal
+        exclusiveZone: 0
+        WlrLayershell.namespace: "quickshell:popup"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        Component.onCompleted: input.forceActiveFocus()
+
+        StyledRectangularShadow { target: card }
+
     Rectangle {
         id: card
-        anchors.centerIn: parent
-        implicitWidth: 440
-        implicitHeight: (root.target.QsWindow.window?.screen?.height ?? 1080) - 50
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.topMargin: Appearance.sizes.hyprlandGapsOut
+        anchors.leftMargin: Appearance.sizes.hyprlandGapsOut
+        anchors.bottomMargin: Appearance.sizes.hyprlandGapsOut
+        width: 440
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.normal
         border.width: 1
@@ -414,5 +434,6 @@ PopupWindow {
                 }
             }
         }
+    }
     }
 }

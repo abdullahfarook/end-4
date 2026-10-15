@@ -12,7 +12,8 @@ RippleButton {
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
-    onClicked: popup.visible = !popup.visible
+    property bool open: false
+    onClicked: open = !open
 
     MaterialSymbol {
         id: icon
@@ -22,5 +23,12 @@ RippleButton {
         color: Appearance.colors.colOnLayer0
     }
 
-    FileSearchPopup { id: popup; target: root; visible: false }
+    // Popup is created only while open and unloaded on close
+    Loader {
+        active: root.open
+        sourceComponent: FileSearchPopup {
+            target: root
+            onVisibleChanged: if (!visible) root.open = false
+        }
+    }
 }
