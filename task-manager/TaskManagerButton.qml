@@ -9,8 +9,8 @@ RippleButton {
     id: root
     property real buttonPadding: 5
     property bool open: false
-    implicitWidth: icon.implicitWidth + buttonPadding * 2   // same sizing as the Docker/Mail buttons
-    implicitHeight: icon.implicitHeight + buttonPadding * 2
+    implicitWidth: 30    // fixed size so every bar icon button is identical
+    implicitHeight: 30
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active

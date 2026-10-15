@@ -14,8 +14,8 @@ import qs.modules.common.widgets
 RippleButton {
     id: root
     property real buttonPadding: 5
-    implicitWidth: icon.implicitWidth + buttonPadding * 2
-    implicitHeight: icon.implicitHeight + buttonPadding * 2
+    implicitWidth: 30    // fixed size so every bar icon button is identical
+    implicitHeight: 30
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active

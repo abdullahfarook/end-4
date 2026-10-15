@@ -53,8 +53,8 @@ RippleButton {
     property var olderNext: null            // opaque per-account cursor for threads.fetchOlder
     property int _olderReqId: -1
 
-    implicitWidth: icon.implicitWidth + buttonPadding * 2
-    implicitHeight: icon.implicitHeight + buttonPadding * 2
+    implicitWidth: 30    // fixed size so every bar icon button is identical
+    implicitHeight: 30
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
