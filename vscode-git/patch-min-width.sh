@@ -11,7 +11,7 @@ W = "vs/workbench/workbench.desktop.main.js"
 for f, old, new, done in [
         ("mainImpl.js", r"(=\{WIDTH:)400(,)", r"\g<1>215\2", r"=\{WIDTH:215,"),
         # sidebar minimum width 170 -> 392 (the Git panel's width) and maximum 392 too: extra window width always goes to the editor, and an opening editor cannot squeeze the sidebar
-        (W, r"(SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g\);this\.minimumWidth=)170;this\.maximumWidth=Number\.POSITIVE_INFINITY;", r"\g<1>392;this.maximumWidth=392;", r"SidebarTitle,e,t,i,n,r,a,c,l,u,p,m,f,g\);this\.minimumWidth=392;this\.maximumWidth=392;"),
+        (W, r"(SidebarTitle(?:,[\w$]+){3,30}\);this\.minimumWidth=)170;this\.maximumWidth=Number\.POSITIVE_INFINITY;", r"\g<1>392;this.maximumWidth=392;", r"SidebarTitle(?:,[\w$]+){3,30}\);this\.minimumWidth=392;this\.maximumWidth=392;"),
         # minimum editor width 220 -> 1: opening a file must not squeeze the sidebar before the window widens
         (W, r"(var [\w$]+=new [\w$]+\()220(,70\),)", r"\g<1>1\2", r"var [\w$]+=new [\w$]+\(1,70\),"),
         # hiding the editor area must not force the bottom panel open (sidebar-only Git panel)
