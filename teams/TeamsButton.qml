@@ -74,7 +74,7 @@ RippleButton {
         id: icon
         anchors.centerIn: parent
         text: "forum"
-        iconSize: 20
+        iconSize: 18
         color: Appearance.colors.colOnLayer0
         opacity: root.running ? 1 : 0.4
     }

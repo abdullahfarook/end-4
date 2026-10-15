@@ -20,7 +20,7 @@ RippleButton {
         id: icon
         anchors.centerIn: parent
         text: "memory"
-        iconSize: 20
+        iconSize: 21
         color: Appearance.colors.colOnLayer0
     }
 

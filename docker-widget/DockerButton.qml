@@ -34,7 +34,7 @@ RippleButton {
         id: icon
         anchors.centerIn: parent
         text: "deployed_code"
-        iconSize: 20
+        iconSize: 21
         color: Appearance.colors.colOnLayer0
         opacity: root.available ? 1 : 0.4
     }

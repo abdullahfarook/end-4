@@ -19,7 +19,7 @@ RippleButton {
         id: icon
         anchors.centerIn: parent
         text: "manage_search"
-        iconSize: 20
+        iconSize: 22
         color: Appearance.colors.colOnLayer0
     }
 
