@@ -46,7 +46,7 @@ Scope {
 
     Process {
         id: psProc
-        command: ["docker", "ps", "--format", "{{json .}}"]
+        command: ["sh", "-c", "systemctl is-active --quiet docker.service && exec docker ps --format '{{json .}}'"]  // is-active first: must not wake the on-demand daemon
         stdout: StdioCollector {
             onStreamFinished: {
                 const out = [];
@@ -68,17 +68,17 @@ Scope {
     }
     Process {  // needs root: graphical polkit prompt
         id: stopProc
-        command: ["pkexec", "systemctl", "stop", "docker.service", "docker.socket"]
+        command: ["systemctl", "stop", "docker.service"]
         onExited: { root.refresh(); refreshSoon.restart() }
     }
     Process {  // needs root: graphical polkit prompt
         id: startProc
-        command: ["pkexec", "systemctl", "start", "docker.socket", "docker.service"]
+        command: ["sh", "-c", "systemctl start docker.socket; systemctl start docker.service"]
         onExited: { root.refresh(); refreshSoon.restart() }
     }
     Process {
         id: statsProc
-        command: ["docker", "stats", "--no-stream", "--format", "{{json .}}"]
+        command: ["sh", "-c", "systemctl is-active --quiet docker.service && exec docker stats --no-stream --format '{{json .}}'"]
         stdout: StdioCollector {
             onStreamFinished: {
                 const s = {};

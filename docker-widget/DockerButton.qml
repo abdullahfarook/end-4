@@ -22,7 +22,7 @@ RippleButton {
 
     Process {
         id: countProc
-        command: ["docker", "ps", "-q"]
+        command: ["sh", "-c", "systemctl is-active --quiet docker.service && docker ps -q"]  // is-active first: polling must not wake the on-demand daemon
         stdout: StdioCollector {
             onStreamFinished: { root.available = true; root.running = text.trim() === "" ? 0 : text.trim().split("\n").length }
         }
@@ -86,7 +86,7 @@ RippleButton {
                 colBackground: "transparent"
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 onClicked: {
-                    Quickshell.execDetached(["pkexec", "systemctl", root.available ? "stop" : "start", "docker.service", "docker.socket"]);
+                    Quickshell.execDetached(root.available ? ["systemctl", "stop", "docker.service"] : ["sh", "-c", "systemctl start docker.socket; systemctl start docker.service"]);
                     menu.visible = false;
                 }
                 contentItem: RowLayout {

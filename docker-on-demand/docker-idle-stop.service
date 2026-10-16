@@ -1,0 +1,6 @@
+[Unit]
+Description=Stop Docker when no containers have been running for a minute
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/docker-idle-stop.sh
