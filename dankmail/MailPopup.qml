@@ -43,6 +43,7 @@ LazyLoader {
       PanelWindow {
         id: popupWindow
         color: "transparent"
+        visible: root.open  // really unmap on close so Hyprland plays the slide-out
         anchors.left: true
         anchors.top: true
         readonly property bool detailOpen: root.store.selectedId >= 0
@@ -58,7 +59,7 @@ LazyLoader {
             left: Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin   // card 5 px from the left edge, like the left sidebar / AI / Git panels
             top: Appearance.sizes.barHeight - Appearance.sizes.elevationMargin + 5
         }
-        WlrLayershell.namespace: "quickshell:popup"
+        WlrLayershell.namespace: "quickshell:sidebarLeft"  // same Hyprland layer rule (slide left) as the left sidebar: native slide in/out
         WlrLayershell.layer: WlrLayer.Overlay
         // Only take keyboard focus while replying: a focused popup makes Hyprland refocus the last window on close, flashing the AI panel
         WlrLayershell.keyboardFocus: detail.visible && detail.replying ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None

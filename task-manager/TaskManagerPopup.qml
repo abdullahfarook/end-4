@@ -173,7 +173,7 @@ Scope {
         mask: Region { item: card }
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
-        WlrLayershell.namespace: "quickshell:popup"
+        WlrLayershell.namespace: "quickshell:sidebarLeft"  // same Hyprland layer rule (slide left) as the left sidebar: native slide in/out
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         Component.onCompleted: input.forceActiveFocus()
