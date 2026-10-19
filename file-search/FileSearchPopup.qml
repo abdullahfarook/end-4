@@ -27,6 +27,12 @@ Scope {
     readonly property bool sortAsc: sortDir !== "" ? sortDir === "asc" : (sortKey === "relevance" || sortKey === "name" || sortKey === "type")
     property bool sortMenuOpen: false
     property bool helpOpen: false
+    property string typeFilter: "all"      // all | dir | file
+    property bool matchCase: false
+    property bool matchPath: false
+    property bool filterOpen: false
+    property real filterX: 0
+    property real filterY: 0
     property real cardW: 440
     property real sizeW: 64
     property real dateW: 100
@@ -41,7 +47,7 @@ Scope {
     ]
     readonly property string sortLabel: sortDefs.find(d => d.key === sortKey).label
     readonly property var sortedResults: {
-        const r = results.slice();
+        const r = typeFilter === "all" ? results.slice() : results.filter(x => x.kind === typeFilter);
         if (sortKey === "relevance") return sortDir === "desc" ? r.reverse() : r;
         const nm = x => x.path.split("/").pop().toLowerCase();
         const dirFirst = x => x.kind === "dir" ? 0 : 1;
@@ -66,11 +72,14 @@ Scope {
     readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/file-search.json`
     property bool stateReady: false
     function saveState() {
-        if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query, cardW }));
+        if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query, cardW, typeFilter, matchCase, matchPath }));
     }
     onSortKeyChanged: saveState()
     onSortDirChanged: saveState()
     onCardWChanged: saveState()
+    onTypeFilterChanged: { current = 0; saveState() }
+    onMatchCaseChanged: { saveState(); debounce.restart() }
+    onMatchPathChanged: { saveState(); debounce.restart() }
     onQueryChanged: saveState()
     FileView { id: stateView; path: root.stateFile; blockLoading: true; atomicWrites: true }
     Component.onCompleted: {
@@ -79,6 +88,9 @@ Scope {
             if (sortDefs.some(d => d.key === j.sortKey)) root.sortKey = j.sortKey;
             if (["", "asc", "desc"].includes(j.sortDir)) root.sortDir = j.sortDir;
             if (typeof j.cardW === "number") root.cardW = Math.max(340, Math.min(900, j.cardW));
+            if (["all", "dir", "file"].includes(j.typeFilter)) root.typeFilter = j.typeFilter;
+            if (typeof j.matchCase === "boolean") root.matchCase = j.matchCase;
+            if (typeof j.matchPath === "boolean") root.matchPath = j.matchPath;
             if (j.scope === "home" || j.scope === "root") root.scope = j.scope;
             if (typeof j.query === "string" && j.query !== "") { input.text = j.query; input.selectAll(); }
         } catch (e) {}
@@ -110,10 +122,10 @@ Scope {
         searchProc.command = ["bash", "-c",
             '[ -s "$1" ] || exit 0; ' +
             // Like Everything: match the file name only, unless the query contains "/" (then match the whole path)
-            'if [[ "$2" == */* ]]; then nth="1,2"; else nth="1"; fi; ' +
-            'fzf --exact --filter "$2" --delimiter $\'\\t\' --nth "$nth" --tiebreak=length,index < "$1" 2>/dev/null | head -1500 | cut -f2- | ' +
+            'if [[ "$2" == */* || "$4" == 1 ]]; then nth="1,2"; else nth="1"; fi; ' +
+            'fzf --exact $3 --filter "$2" --delimiter $\'\\t\' --nth "$nth" --tiebreak=length,index < "$1" 2>/dev/null | head -1500 | cut -f2- | ' +
             'xargs -d "\\n" -r stat --printf "%F\\t%s\\t%Y\\t%n\\n" 2>/dev/null',
-            "_", idxFile, q];
+            "_", idxFile, q, matchCase ? "+i" : "-i", matchPath ? "1" : "0"];
         searchProc.running = true;
     }
     function openPath(p) { Quickshell.execDetached(["xdg-open", p]); root.visible = false }
@@ -256,7 +268,7 @@ Scope {
                             font.pixelSize: Appearance.font.pixelSize.normal
                             clip: true
                             onTextChanged: { root.query = text; debounce.restart() }
-                            Keys.onEscapePressed: { if (root.menuItem) root.menuItem = null; else if (root.helpOpen) root.helpOpen = false; else if (root.sortMenuOpen) root.sortMenuOpen = false; else root.visible = false }
+                            Keys.onEscapePressed: { if (root.menuItem) root.menuItem = null; else if (root.filterOpen) root.filterOpen = false; else if (root.helpOpen) root.helpOpen = false; else if (root.sortMenuOpen) root.sortMenuOpen = false; else root.visible = false }
                             Keys.onDownPressed: root.current = Math.min(root.current + 1, root.sortedResults.length - 1)
                             Keys.onUpPressed: root.current = Math.max(root.current - 1, 0)
                             Keys.onReturnPressed: event => {
@@ -293,6 +305,26 @@ Scope {
                             RotationAnimator on rotation { running: parent.visible; from: 0; to: 360; duration: 900; loops: Animation.Infinite }
                         }
                     }
+                }
+                RippleButton {
+                    id: filterBtn
+                    readonly property bool active: root.typeFilter !== "all" || root.matchCase || root.matchPath
+                    implicitWidth: 40; implicitHeight: 40
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: active ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: {
+                        const p = mapToItem(card, width, height + 4);
+                        root.filterX = p.x; root.filterY = p.y; root.filterOpen = !root.filterOpen;
+                        input.forceActiveFocus();
+                    }
+                    contentItem: MaterialSymbol {
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "filter_list"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: filterBtn.active ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
+                    }
+                    StyledToolTip { text: Translation.tr("Filters"); visible: filterBtn.hovered }
                 }
                 RippleButton {
                     implicitHeight: 40; implicitWidth: 40
@@ -432,7 +464,6 @@ Scope {
                         }
                         StyledText {
                             Layout.preferredWidth: root.dateW
-                            Layout.rightMargin: 4
                             text: root.fmtDate(row.modelData.mtime)
                             horizontalAlignment: Text.AlignRight
                             font.family: Appearance.font.family.monospace
@@ -665,6 +696,54 @@ Scope {
                 opacity: widthGrip.pressed || widthGrip.containsMouse ? 1 : 0
                 color: Appearance.colors.colPrimary
                 Behavior on opacity { NumberAnimation { duration: 120 } }
+            }
+        }
+
+        // Filter menu (overlay inside the card)
+        MouseArea {
+            anchors.fill: parent
+            visible: root.filterOpen
+            onPressed: root.filterOpen = false
+        }
+        Rectangle {
+            visible: root.filterOpen
+            x: Math.max(8, Math.min(root.filterX - width, card.width - width - 8))
+            y: root.filterY
+            implicitWidth: 230
+            implicitHeight: filterCol.implicitHeight + 12
+            radius: Appearance.rounding.small
+            color: Appearance.m3colors.m3surfaceContainerHigh
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            component FilterRow: RippleButton {
+                id: fr
+                property string sym
+                property string label
+                property bool on
+                Layout.fillWidth: true
+                implicitHeight: 34
+                buttonRadius: Appearance.rounding.small
+                colBackground: on ? Appearance.colors.colSecondaryContainer : "transparent"
+                colBackgroundHover: on ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+                contentItem: RowLayout {
+                    spacing: 10
+                    MaterialSymbol { Layout.leftMargin: 6; text: fr.sym; iconSize: Appearance.font.pixelSize.larger; color: fr.on ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2 }
+                    StyledText { Layout.fillWidth: true; text: fr.label; font.weight: fr.on ? Font.Medium : Font.Normal; color: fr.on ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2 }
+                    MaterialSymbol { Layout.rightMargin: 6; visible: fr.on; text: "check"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnSecondaryContainer }
+                }
+            }
+            ColumnLayout {
+                id: filterCol
+                anchors { fill: parent; margins: 6 }
+                spacing: 2
+                StyledText { Layout.leftMargin: 8; Layout.topMargin: 2; Layout.bottomMargin: 2; text: Translation.tr("Show"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
+                FilterRow { sym: "select_all"; label: Translation.tr("Files and folders"); on: root.typeFilter === "all"; onClicked: root.typeFilter = "all" }
+                FilterRow { sym: "description"; label: Translation.tr("Files only"); on: root.typeFilter === "file"; onClicked: root.typeFilter = "file" }
+                FilterRow { sym: "folder"; label: Translation.tr("Folders only"); on: root.typeFilter === "dir"; onClicked: root.typeFilter = "dir" }
+                Rectangle { Layout.fillWidth: true; Layout.topMargin: 4; Layout.bottomMargin: 2; implicitHeight: 1; color: Appearance.colors.colLayer0Border; opacity: 0.6 }
+                StyledText { Layout.leftMargin: 8; Layout.topMargin: 2; text: Translation.tr("Match"); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
+                FilterRow { sym: "match_case"; label: Translation.tr("Match case"); on: root.matchCase; onClicked: root.matchCase = !root.matchCase }
+                FilterRow { sym: "route"; label: Translation.tr("Match full path"); on: root.matchPath; onClicked: root.matchPath = !root.matchPath }
             }
         }
 
