@@ -10,7 +10,7 @@ import Quickshell.Hyprland
 // Google widget: one card (search field + progress line); the results are a real QtWebEngine window (gsearch.py)
 // that appears under it only after the first search and tucks its top corners behind the card, so both read as one panel.
 // Placed by the Hyprland rule in google-search-rules.lua; keep the geometry constants in sync.
-// Typing loads results after a short pause, Enter immediately; Esc closes everything (also Esc in the browser).
+// Typing only shows suggestions from recent searches; Enter (or picking a suggestion) searches; Esc closes everything (also Esc in the browser).
 Scope {
     id: root
     required property Item target
@@ -30,12 +30,32 @@ Scope {
     readonly property int browserX: 5
     readonly property int browserY: 114
 
-    function go() { // send the query to the running browser window
-        debounce.stop();
-        const q = query.trim();
-        if (q === "") { browserShown = false; loading = false }
-        else if (!browserShown) loading = true; // first search: spinner in the card until the page is loaded
+    function go(text) { // search/open `text` (Enter or picking a suggestion); typing alone never searches
+        const q = (text ?? query).trim();
+        if (q === "") return;
+        suggestOpen = false;
+        target.memQuery = q;
+        target.history = [q].concat(target.history.filter(h => h.toLowerCase() !== q.toLowerCase())).slice(0, 50);
+        if (!browserShown) loading = true; // first search: spinner in the field until the page is loaded
         Quickshell.execDetached([bin, "show", q]);
+    }
+
+    // Suggestions from recent searches/addresses (in memory, kept on the bar button)
+    property bool suggestOpen: false
+    property int sel: -1
+    property var suggestions: []
+    function refreshSuggestions() { // only while typing, and only entries related to the typed text
+        const q = input.text.trim().toLowerCase();
+        const h = target.history ?? [];
+        sel = -1;
+        if (q === "") { suggestions = []; suggestOpen = false; return; }
+        const r = h.filter(x => x.toLowerCase().includes(q) && x.toLowerCase() !== q);
+        suggestions = r.filter(x => x.toLowerCase().startsWith(q)).concat(r.filter(x => !x.toLowerCase().startsWith(q))).slice(0, 8);
+        suggestOpen = suggestions.length > 0;
+    }
+    function removeHistory(item) {
+        target.history = target.history.filter(h => h !== item);
+        refreshSuggestions();
     }
     onVisibleChanged: if (!visible) closeBrowser()
 
@@ -66,7 +86,6 @@ Scope {
     Component.onDestruction: closeBrowser()
 
     Timer { interval: 400; running: true; onTriggered: root.openGrab = false }
-    Timer { id: debounce; interval: 800; onTriggered: root.go() }
     // The helper runs detached (it must outlive this popup until the slide-out is done); it reports status lines to a file
     readonly property string statusFile: (Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp") + "/gsearch-status"
     Process {
@@ -74,7 +93,7 @@ Scope {
         command: ["sh", "-c", 'touch "$1"; exec tail -n 0 -F "$1"', "_", root.statusFile]
         stdout: SplitParser {
             onRead: line => {
-                if (line === "shown") root.browserShown = true
+                if (line === "shown") { root.browserShown = true; Quickshell.execDetached([root.scriptDir + "/gsearch-open.sh"]) } // open.sh is idempotent: re-shows the browser workspace if it got out of sync
                 else if (line.startsWith("nav ")) { const p = line.split(" "); root.canBack = p[1] === "1"; root.canForward = p[2] === "1" }
                 else if (line.startsWith("url ")) root.target.memUrl = line.slice(4)
                 else if (line === "loading") { root.loading = true; root.progress = 0 }
@@ -122,7 +141,10 @@ Scope {
         anchors { top: true; left: true }
         implicitWidth: root.cardWidth + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
         anchors.bottom: true
-        mask: Region { item: card }
+        mask: Region {
+            item: card
+            Region { item: dropdown }
+        }
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:sidebarLeft"
@@ -130,10 +152,65 @@ Scope {
         // The field must own the keyboard on open and while the first search loads (the browser window would steal focus when it maps),
         // so grab it exclusively for a moment / while loading; otherwise OnDemand, because an exclusive layer makes Hyprland
         // ignore clicks on windows and on the click-away layer.
-        WlrLayershell.keyboardFocus: (root.openGrab || (root.query.trim() !== "" && !root.browserShown)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+        WlrLayershell.keyboardFocus: (root.openGrab || (root.loading && !root.browserShown)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
         Component.onCompleted: input.forceActiveFocus()
 
         StyledRectangularShadow { target: card }
+
+        Rectangle { // suggestions from recent searches (over the empty state or the browser), like a browser address-bar list
+            id: dropdown
+            visible: root.suggestOpen && root.suggestions.length > 0
+            x: card.x + 14
+            y: card.y + 14 + 40 + 4
+            width: root.suggestOpen ? root.cardWidth - 28 : 0
+            height: visible ? list.implicitHeight + 8 : 0
+            radius: Appearance.rounding.small + 4
+            color: Appearance.m3colors.m3surfaceContainerHigh // opaque: the layer-2 color is translucent and showed the windows behind
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            z: 10
+            ColumnLayout {
+                id: list
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 4 }
+                spacing: 0
+                Repeater {
+                    model: root.suggestions
+                    delegate: RippleButton {
+                        id: row
+                        required property string modelData
+                        required property int index
+                        readonly property string typed: input.text.trim()
+                        readonly property int at: modelData.toLowerCase().indexOf(typed.toLowerCase())
+                        function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
+                        // typed part regular, the rest bold (address-bar style: the completion stands out)
+                        readonly property string html: at < 0 ? esc(modelData)
+                            : esc(modelData.slice(0, at)) + "<span style='color:" + Appearance.colors.colSubtext + "'>" + esc(modelData.slice(at, at + typed.length)) + "</span><b>" + esc(modelData.slice(at + typed.length)) + "</b>"
+                        Layout.fillWidth: true
+                        implicitHeight: 30
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: root.sel === index ? Appearance.colors.colSecondaryContainer : "transparent"
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        onClicked: { input.programmatic = true; input.text = modelData; input.programmatic = false; root.go(modelData) }
+                        contentItem: RowLayout {
+                            spacing: 8
+                            MaterialSymbol { Layout.leftMargin: 4; text: /^(https?:\/\/|www\.)|^[\w-]+(\.[\w-]+)+(\/|$)/i.test(row.modelData) ? "language" : "history"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colSubtext }
+                            StyledText { Layout.fillWidth: true; textFormat: Text.RichText; text: row.html; elide: Text.ElideRight; font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer2 }
+                            RippleButton { // forget this entry
+                                visible: row.hovered || root.sel === row.index
+                                implicitWidth: 22; implicitHeight: 22
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: "transparent"
+                                colBackgroundHover: Appearance.colors.colLayer1Hover
+                                onClicked: root.removeHistory(row.modelData)
+                                contentItem: MaterialSymbol { horizontalAlignment: Text.AlignHCenter; text: "close"; iconSize: Appearance.font.pixelSize.small; color: Appearance.colors.colSubtext }
+                                StyledToolTip { text: "Remove from history"; visible: parent.hovered }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Rectangle {
             id: card
             anchors { top: parent.top; left: parent.left; topMargin: Appearance.sizes.hyprlandGapsOut; leftMargin: Appearance.sizes.hyprlandGapsOut }
@@ -244,14 +321,23 @@ Scope {
                         color: Appearance.colors.colOnLayer2
                         font.pixelSize: Appearance.font.pixelSize.normal
                         clip: true
+                        property bool programmatic: false
                         onTextChanged: {
                             root.query = text;
-                            if (root.restoring) return;
-                            root.target.memQuery = text;
-                            if (text.trim() === "") { root.target.memUrl = ""; root.go() } else debounce.restart();
+                            if (root.restoring || programmatic) return;
+                            root.refreshSuggestions(); // typing only suggests; searching needs Enter
                         }
-                        Keys.onEscapePressed: root.visible = false
-                        Keys.onReturnPressed: root.go()
+                        onActiveFocusChanged: if (!activeFocus) root.suggestOpen = false
+                        Keys.onEscapePressed: { if (root.suggestOpen) root.suggestOpen = false; else root.visible = false }
+                        Keys.onDownPressed: {
+                            if (!root.suggestOpen) root.refreshSuggestions();
+                            if (root.suggestions.length > 0) root.sel = Math.min(root.sel + 1, root.suggestions.length - 1);
+                        }
+                        Keys.onUpPressed: root.sel = Math.max(root.sel - 1, -1)
+                        Keys.onReturnPressed: {
+                            const pick = root.sel >= 0 ? root.suggestions[root.sel] : null;
+                            if (pick) { programmatic = true; text = pick; programmatic = false; root.go(pick) } else root.go()
+                        }
                         StyledText {
                             visible: input.text === ""
                             anchors.verticalCenter: parent.verticalCenter

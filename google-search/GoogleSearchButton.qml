@@ -15,6 +15,7 @@ RippleButton {
     // Last session (kept in memory only, lost when the shell restarts): restored when the popup opens again
     property string memQuery: ""
     property string memUrl: ""
+    property var history: [] // recent searches / addresses, newest first (suggestions)
     onClicked: open = !open
 
     MaterialSymbol {
