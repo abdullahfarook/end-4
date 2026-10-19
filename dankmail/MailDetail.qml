@@ -186,7 +186,19 @@ Rectangle {
                     selectionColor: Appearance.colors.colPrimary
                     selectedTextColor: Appearance.colors.colOnPrimary
                     onLinkActivated: link => Qt.openUrlExternally(link)
-                    HoverHandler { cursorShape: parent.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor }
+                    MouseArea {  // links: TextEdit's own linkActivated never fires here (selectByMouse + ListView), so open them ourselves
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+                        property string link: ""
+                        onPressed: mouse => {  // open on press: onClicked never fired here; non-link presses fall through to text selection
+                            link = bodyText.linkAt(mouse.x, mouse.y);
+                            mouse.accepted = link !== "";
+                            if (link === "") return;
+                            // Open in the default browser, close the popup and focus the browser (it may be on another workspace)
+                            Quickshell.execDetached(["bash", "-c", 'xdg-open "$1"; sleep 0.7; c=$(xdg-settings get default-web-browser); hyprctl dispatch "hl.dsp.focus({ window = \\"class:${c%.desktop}\\" })"', "_", link]);
+                            detail.store.popupOpen = false; detail.store.closeThread();
+                        }
+                    }
                     TapHandler {
                         acceptedButtons: Qt.RightButton
                         onTapped: ctxMenu.popup()
@@ -309,5 +321,39 @@ Rectangle {
                 }
             }
         }
+    }
+
+    // Cursor over the message bodies: no cursor shape set by an item inside the messages ListView ever reached the screen
+    // (always the arrow, though Qt reported the right shape), while MouseAreas outside it work. So this hover-only layer
+    // above the list finds the body text under the pointer and sets the shape; buttons/wheel/presses pass through.
+    MouseArea {
+        id: bodyCursor
+        x: messages.x; y: messages.y; z: 5
+        width: messages.width - 12; height: messages.height  // leave the scrollbar its own cursor
+        visible: messages.visible
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: true
+        property int shape: Qt.ArrowCursor
+        cursorShape: shape
+        function textAt(item, x, y) {  // deepest body TextEdit under (x, y) in item's coordinates
+            // walk every child, not childAt(): that returns only the topmost hit (the full-size wheel MouseArea)
+            const kids = item.children;
+            for (let i = kids.length - 1; i >= 0; i--) {
+                const child = kids[i];
+                if (!child.visible || child.width <= 0 || child.height <= 0) continue;
+                const p = item.mapToItem(child, x, y);
+                if (p.x < 0 || p.y < 0 || p.x >= child.width || p.y >= child.height) continue;
+                if (typeof child.linkAt === "function") return { "edit": child, "x": p.x, "y": p.y };
+                const hit = textAt(child, p.x, p.y);
+                if (hit) return hit;
+            }
+            return null;
+        }
+        onPositionChanged: mouse => {
+            const c = mapToItem(messages.contentItem, mouse.x, mouse.y);
+            const hit = textAt(messages.contentItem, c.x, c.y);
+            shape = !hit ? Qt.ArrowCursor : hit.edit.linkAt(hit.x, hit.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor;
+        }
+        onExited: shape = Qt.ArrowCursor
     }
 }

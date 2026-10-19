@@ -50,7 +50,9 @@ LazyLoader {
         // Default: full screen height like the AI panel (panel ends 20px above the bottom); dragging a bottom edge overrides it
         readonly property int fullHeight: (screen ? screen.height : 1080) - 50
         readonly property int contentHeight: root.popupHeight > 0 ? root.popupHeight : fullHeight
-        implicitWidth: 440 + (detailOpen ? 8 + root.detailWidth : 0) + Appearance.sizes.elevationMargin * 2
+        // fixed width (the mask limits input to what is shown): growing the surface when a thread opened left the added area
+        // without cursor shapes (always the arrow over the detail panel's links, text and buttons)
+        implicitWidth: 440 + 8 + root.detailWidth + Appearance.sizes.elevationMargin * 2
         implicitHeight: contentHeight + Appearance.sizes.elevationMargin * 2
         mask: Region { item: root.open ? wrap : null }
         exclusionMode: ExclusionMode.Ignore
@@ -71,11 +73,14 @@ LazyLoader {
         }
 
         StyledRectangularShadow { target: panel; visible: root.open }
-        StyledRectangularShadow { target: detail; visible: root.open && detail.visible }
+        StyledRectangularShadow { target: detail; visible: root.open && popupWindow.detailOpen }
 
         MailDetail {
             id: detail
-            visible: root.open && popupWindow.detailOpen
+            // not visible-toggled: re-showing it lost every cursor shape inside (Qt cursor-in-child bookkeeping); fade instead
+            visible: root.open
+            opacity: popupWindow.detailOpen ? 1 : 0
+            enabled: popupWindow.detailOpen
             store: root.store
             anchors { left: panel.right; top: parent.top; bottom: parent.bottom; right: parent.right; leftMargin: 8; topMargin: Appearance.sizes.elevationMargin; bottomMargin: Appearance.sizes.elevationMargin; rightMargin: Appearance.sizes.elevationMargin }
             onCloseRequested: root.store.closeThread()
