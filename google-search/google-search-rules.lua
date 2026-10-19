@@ -1,6 +1,6 @@
 -- >>> google-search >>>
--- Google widget: gsearch.py (QtWebEngine) docked under the popup's search field (left side, below the bar).
-local gs = { class = "^(gsearch)$" }
+-- Google widget: gsearch.qml (QtWebEngine via qml6) docked under the popup's search field (left side, below the bar).
+local gs = { title = "^(gsearch)$" }
 hl.window_rule({ match = gs, float = true })
 hl.window_rule({ match = gs, workspace = "special:gsearch silent" })
 hl.window_rule({ match = gs, size = { 440, "(monitor_h-119)" } })

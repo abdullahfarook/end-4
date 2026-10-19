@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# Google widget: bar button + popup with a search field and an embedded QtWebEngine browser (gsearch.py) below it (idempotent).
-# Needs: pacman -S pyside6.
+# Google widget: bar button + popup with a search field and an embedded QtWebEngine browser (gsearch.qml via gsearch.sh) below it (idempotent).
+# Needs: qt6-webengine, qt6-declarative (qml6). No Python.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; BAR="$Q/modules/ii/bar/BarContent.qml"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
 BACKUP="$HOME/backups/google-search/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$BAR" "$KEYBINDS" "$BACKUP/"
-python3 -c "import PySide6.QtWebEngineWidgets" 2>/dev/null || { echo "pyside6 missing: pkexec pacman -S pyside6" >&2; exit 1; }
+command -v qml6 >/dev/null && pacman -Q qt6-webengine >/dev/null 2>&1 || { echo "needs qt6-declarative + qt6-webengine: pkexec pacman -S qt6-declarative qt6-webengine" >&2; exit 1; }
 for f in GoogleSearchButton.qml GoogleSearchPopup.qml; do
   [ -f "$Q/modules/ii/bar/$f" ] && cp "$Q/modules/ii/bar/$f" "$BACKUP/"
   install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
-install -Dm755 "$REPO/gsearch.py" "$HOME/.config/hypr/custom/gsearch.py"
+install -Dm755 "$REPO/gsearch.sh" "$HOME/.config/hypr/custom/gsearch.sh"
+install -Dm644 "$REPO/gsearch.qml" "$HOME/.config/hypr/custom/gsearch.qml"
+rm -f "$HOME/.config/hypr/custom/gsearch.py"
+# keep the old PySide6 profile (cookies, solved captcha) once
+OLD="$HOME/.local/share/gsearch.py/QtWebEngine/gsearch"; NEW="$HOME/.local/share/gsearch"
+[ -d "$OLD" ] && [ ! -e "$NEW/.migrated-from-pyside" ] && { [ -d "$NEW" ] && mv "$NEW" "$HOME/backups/gsearch-profile-$(date +%Y%m%d-%H%M%S)"; cp -r "$OLD" "$NEW"; touch "$NEW/.migrated-from-pyside"; } || true
 install -Dm755 "$REPO/gsearch-open.sh" "$HOME/.config/hypr/custom/gsearch-open.sh"
 install -Dm755 "$REPO/gsearch-close.sh" "$HOME/.config/hypr/custom/gsearch-close.sh"
 [ -e "$HOME/.config/hypr/custom/gsearch-close-delay" ] || install -Dm644 "$REPO/gsearch-close-delay" "$HOME/.config/hypr/custom/gsearch-close-delay"  # tuning knob, never overwritten

@@ -7,7 +7,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
-// Google widget: one card (search field + progress line); the results are a real QtWebEngine window (gsearch.py)
+// Google widget: one card (search field + progress line); the results are a real QtWebEngine window (gsearch.qml via gsearch.sh)
 // that appears under it only after the first search and tucks its top corners behind the card, so both read as one panel.
 // Placed by the Hyprland rule in google-search-rules.lua; keep the geometry constants in sync.
 // Typing only shows suggestions from recent searches; Enter (or picking a suggestion) searches; Esc closes everything (also Esc in the browser).
@@ -23,7 +23,7 @@ Scope {
     property real progress: 0
     property bool canBack: false
     property bool canForward: false
-    readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.py"
+    readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.sh"
     readonly property int cardWidth: 440
     readonly property int headerHeight: 68
     readonly property int overlap: 8       // card extends this far over the browser's rounded top corners

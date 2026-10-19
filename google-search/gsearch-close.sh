@@ -11,4 +11,4 @@ same || exit 0
 hyprctl monitors | grep -q "special workspace: .* (special:gsearch)" \
     && hyprctl dispatch 'hl.dsp.workspace.toggle_special("gsearch")' >/dev/null
 sleep 1; same || exit 0
-exec "$HOME/.config/hypr/custom/gsearch.py" hide
+exec "$HOME/.config/hypr/custom/gsearch.sh" hide
