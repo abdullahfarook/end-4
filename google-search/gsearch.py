@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Embedded Google (QtWebEngine) window docked under the Google widget popup.
 
-Usage: gsearch.py show <query> | hide | back | forward | reload | stop | open
+Usage: gsearch.py show <query> | goto <url> | hide | back | forward | reload | stop | open
 Empty query = stays hidden. First `show` starts the single instance (persistent profile ~/.local/share/gsearch); `hide` quits it.
 """
 import os, re, sys, time, subprocess
@@ -32,7 +32,7 @@ app.setDesktopFileName(NAME)  # Wayland app_id -> Hyprland rules match class "gs
 
 if send(f"{cmd}\t{arg}"):
     sys.exit(0)
-if cmd != "show":  # only `show` starts a new instance
+if cmd not in ("show", "goto"):  # only these start a new instance
     sys.exit(0)
 
 lock = QLockFile(os.path.join(RUN, "gsearch.lock")); lock.setStaleLockTime(10000)
@@ -114,6 +114,14 @@ view.loadFinished.connect(finished)
 def nav(*_):
     h = view.history(); emit(f"nav {int(h.canGoBack())} {int(h.canGoForward())}")
 view.urlChanged.connect(nav); view.loadFinished.connect(nav)
+def report_url(u):  # the popup remembers the current page (in memory only) to restore it on the next open
+    if last["q"] and u.toString() != "about:blank":
+        emit("url " + u.toString())
+view.urlChanged.connect(report_url)
+
+def goto(u):  # restore an exact address (last session's page), bypassing search detection
+    last["q"] = u; state["revealed"] = False
+    view.load(QUrl(u))
 
 def show(q):
     if not q:  # back to the blank state: keep the (empty) window mapped, covered by the popup card
@@ -138,11 +146,12 @@ def on_conn():
         elif c == "reload": view.reload()
         elif c == "stop": view.stop()
         elif c == "open": external(view.url())
+        elif c == "goto": goto(a)
         else: show(a)
     s.readyRead.connect(rd)
 server.newConnection.connect(on_conn)
 
 win.show()  # mapped right away (slides in with the popup header), hidden behind the popup card until results are ready
-show(arg)
+goto(arg) if cmd == "goto" else show(arg)
 lock.unlock()
 sys.exit(app.exec())

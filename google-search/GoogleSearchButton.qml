@@ -12,6 +12,9 @@ RippleButton {
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
     property bool open: false
+    // Last session (kept in memory only, lost when the shell restarts): restored when the popup opens again
+    property string memQuery: ""
+    property string memUrl: ""
     onClicked: open = !open
 
     MaterialSymbol {

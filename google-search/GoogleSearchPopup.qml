@@ -17,6 +17,7 @@ Scope {
     property bool visible: true
     property string query: ""
     property bool browserShown: false
+    property bool restoring: false
     property bool openGrab: true // exclusive keyboard focus right after opening
     property bool loading: false
     property real progress: 0
@@ -44,8 +45,16 @@ Scope {
     property bool closed: false
     Component.onCompleted: {
         Quickshell.execDetached([scriptDir + "/gsearch-open.sh"]);
+        const url = root.target.memUrl ?? "";
+        if (url !== "") { // restore the last session: field text + exact page (selected, so typing replaces it)
+            root.restoring = true;
+            input.text = root.target.memQuery ?? "";
+            input.selectAll();
+            root.restoring = false;
+            root.loading = true;
+        }
         Quickshell.execDetached({
-            command: [bin, "show", ""],
+            command: url !== "" ? [bin, "goto", url] : [bin, "show", ""],
             environment: { GSEARCH_BG: String(Appearance.m3colors.m3surfaceContainer), GSEARCH_THUMB: String(Appearance.colors.colOutlineVariant), GSEARCH_THUMB_HOVER: String(Appearance.colors.colOutline) }
         });
     }
@@ -67,6 +76,7 @@ Scope {
             onRead: line => {
                 if (line === "shown") root.browserShown = true
                 else if (line.startsWith("nav ")) { const p = line.split(" "); root.canBack = p[1] === "1"; root.canForward = p[2] === "1" }
+                else if (line.startsWith("url ")) root.target.memUrl = line.slice(4)
                 else if (line === "loading") { root.loading = true; root.progress = 0 }
                 else if (line.startsWith("progress ")) root.progress = Number(line.slice(9)) / 100
                 else if (line === "done" || line === "failed") root.loading = false
@@ -236,7 +246,9 @@ Scope {
                         clip: true
                         onTextChanged: {
                             root.query = text;
-                            if (text.trim() === "") root.go(); else debounce.restart();
+                            if (root.restoring) return;
+                            root.target.memQuery = text;
+                            if (text.trim() === "") { root.target.memUrl = ""; root.go() } else debounce.restart();
                         }
                         Keys.onEscapePressed: root.visible = false
                         Keys.onReturnPressed: root.go()
