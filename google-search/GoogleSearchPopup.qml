@@ -152,17 +152,11 @@ Scope {
                     implicitWidth: 72; implicitHeight: 72
                     radius: Appearance.rounding.full
                     color: Appearance.colors.colSecondaryContainer
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: root.loading ? "progress_activity" : "travel_explore"
-                        iconSize: 36
-                        color: Appearance.colors.colOnSecondaryContainer
-                        RotationAnimator on rotation { running: root.loading; from: 0; to: 360; duration: 900; loops: Animation.Infinite; onRunningChanged: if (!running && target) target.rotation = 0 }
-                    }
+                    MaterialSymbol { anchors.centerIn: parent; text: "travel_explore"; iconSize: 36; color: Appearance.colors.colOnSecondaryContainer }
                 }
                 StyledText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: root.loading ? "Searching…" : "Search Google"
+                    text: "Search Google"
                     font.pixelSize: Appearance.font.pixelSize.larger
                     color: Appearance.colors.colSubtext
                 }
