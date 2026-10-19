@@ -213,6 +213,11 @@ Scope {
                 height: 40
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colLayer2
+                MouseArea { // text cursor over the field; clicks fall through to the input and buttons
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    cursorShape: Qt.IBeamCursor
+                }
                 RowLayout {
                     anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
                     spacing: 8

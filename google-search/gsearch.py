@@ -4,7 +4,7 @@
 Usage: gsearch.py show <query> | hide | back | forward | reload | stop | open
 Empty query = stays hidden. First `show` starts the single instance (persistent profile ~/.local/share/gsearch); `hide` quits it.
 """
-import os, sys, time, subprocess
+import os, re, sys, time, subprocess
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland")
 from urllib.parse import quote_plus
 from PySide6.QtCore import QUrl, QLockFile, Qt, QTimer
@@ -73,7 +73,7 @@ sc.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
 sc.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld); sc.setRunsOnSubFrames(True)
 sc.setSourceCode("(function(){var s=document.createElement('style');s.textContent=%r;(document.head||document.documentElement).appendChild(s)})()" % css)
 profile.scripts().insert(sc)
-# Top-level window = card-colored container with top padding (8 px, hidden under the popup card), so the page
+# Top-level window = card-colored container with top padding (8 px, hidden under the popup card), the page
 # doesn't start right under the header and the padding blends into it
 win = QWidget(); win.setWindowTitle("gsearch"); win.resize(440, 800)
 pal = win.palette(); pal.setColor(QPalette.ColorRole.Window, QColor(os.environ.get("GSEARCH_BG", "#1f1f1f")))
@@ -88,6 +88,16 @@ QShortcut(QKeySequence("Esc"), win, activated=esc)  # the popup closes when this
 
 last = {"q": None}
 STATUS = os.path.join(RUN, "gsearch-status")
+TLDS = ("com org net io dev edu gov co ai app me info biz tv us uk de fr in pk ca au nl ru jp cn br it es se no ch xyz online site tech "
+        "cloud wiki news store blog tk cc ly gg to fm gl ws is eu nz za ae sa tr kr id vn sg hk tw cz gr pt ie be at dk fi").split()
+URL_RE = re.compile(r"^(?:(?:https?|file)://\S+|(?:www\.)?(?:[a-z0-9-]+\.)+(?:%s)(?::\d+)?(?:[/?#]\S*)?|localhost(?::\d+)?(?:[/?#]\S*)?|\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:[/?#]\S*)?)$" % "|".join(TLDS), re.I)
+def target_url(q):
+    """Address-like input (hello.com, https://x, localhost:3000, 10.0.0.1) opens the site; anything else is a Google search."""
+    q = q.strip()
+    if URL_RE.match(q):
+        return q if re.match(r"^[a-z]+://", q, re.I) else ("http://" if re.match(r"^(localhost|\d)", q, re.I) else "https://") + q
+    return "https://www.google.com/search?q=" + quote_plus(q)
+
 def emit(m):  # status lines for the popup (QML tails this file; the helper runs detached so it outlives the popup during the slide-out)
     with open(STATUS, "a") as f:
         f.write(m + "\n")
@@ -113,7 +123,7 @@ def show(q):
         return
     if q != last["q"]:
         last["q"] = q
-        view.load(QUrl("https://www.google.com/search?q=" + quote_plus(q)))
+        view.load(QUrl(target_url(q)))
     elif not state["revealed"]:
         state["revealed"] = True; emit("shown"); emit("done")
 
