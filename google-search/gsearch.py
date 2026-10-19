@@ -8,9 +8,9 @@ import os, sys, time, subprocess
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland")
 from urllib.parse import quote_plus
 from PySide6.QtCore import QUrl, QLockFile, Qt
-from PySide6.QtGui import QShortcut, QKeySequence, QColor
+from PySide6.QtGui import QShortcut, QKeySequence, QColor, QPalette
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage, QWebEngineScript
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
@@ -72,12 +72,16 @@ sc.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
 sc.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld); sc.setRunsOnSubFrames(True)
 sc.setSourceCode("(function(){var s=document.createElement('style');s.textContent=%r;(document.head||document.documentElement).appendChild(s)})()" % css)
 profile.scripts().insert(sc)
-view.setWindowTitle("gsearch")
-view.resize(900, 620)
+# Top-level window = card-colored container with top padding (8 px, hidden under the popup card), so the page
+# doesn't start right under the header and the padding blends into it
+win = QWidget(); win.setWindowTitle("gsearch"); win.resize(440, 800)
+pal = win.palette(); pal.setColor(QPalette.ColorRole.Window, QColor(os.environ.get("GSEARCH_BG", "#1f1f1f")))
+win.setPalette(pal); win.setAutoFillBackground(True)  # a bare top-level QWidget otherwise paints black
+lay = QVBoxLayout(win); lay.setContentsMargins(0, 8, 0, 0); lay.setSpacing(0); lay.addWidget(view)
 view.settings().setAttribute(view.settings().WebAttribute.PlaybackRequiresUserGesture, True)
 view.page().setBackgroundColor(QColor(os.environ.get("GSEARCH_BG", "#1f1f1f")))
 
-QShortcut(QKeySequence("Esc"), view, activated=app.quit)  # the popup closes when this process exits
+QShortcut(QKeySequence("Esc"), win, activated=app.quit)  # the popup closes when this process exits
 
 last = {"q": None}
 def emit(m):  # status lines for the popup (QML) on stdout
@@ -123,7 +127,7 @@ def on_conn():
     s.readyRead.connect(rd)
 server.newConnection.connect(on_conn)
 
-view.show()  # mapped right away (slides in with the popup header), hidden behind the popup card until results are ready
+win.show()  # mapped right away (slides in with the popup header), hidden behind the popup card until results are ready
 show(arg)
 lock.unlock()
 sys.exit(app.exec())

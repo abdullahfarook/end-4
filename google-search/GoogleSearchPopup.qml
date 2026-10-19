@@ -23,10 +23,10 @@ Scope {
     property bool canForward: false
     readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.py"
     readonly property int cardWidth: 440
-    readonly property int headerHeight: 72
-    readonly property int overlap: 12      // card extends this far over the browser's rounded top corners
+    readonly property int headerHeight: 68
+    readonly property int overlap: 8       // card extends this far over the browser's rounded top corners
     readonly property int browserX: 5
-    readonly property int browserY: 118
+    readonly property int browserY: 114
 
     function go() { // send the query to the running browser window
         debounce.stop();
@@ -147,7 +147,7 @@ Scope {
                         text: root.loading ? "progress_activity" : "travel_explore"
                         iconSize: 36
                         color: Appearance.colors.colOnSecondaryContainer
-                        RotationAnimator on rotation { running: root.loading; from: 0; to: 360; duration: 900; loops: Animation.Infinite; onRunningChanged: if (!running) target.rotation = 0 }
+                        RotationAnimator on rotation { running: root.loading; from: 0; to: 360; duration: 900; loops: Animation.Infinite; onRunningChanged: if (!running && target) target.rotation = 0 }
                     }
                 }
                 StyledText {
@@ -168,7 +168,7 @@ Scope {
             RowLayout { // browser toolbar (only with results)
                 id: tools
                 visible: root.browserShown
-                anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 16 }
+                anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 14 }
                 height: 40
                 spacing: 2
                 Repeater {
@@ -199,7 +199,7 @@ Scope {
 
             Rectangle { // search pill
                 id: pill
-                anchors { left: parent.left; right: root.browserShown ? tools.left : parent.right; top: parent.top; margins: 16; rightMargin: root.browserShown ? 6 : 16 }
+                anchors { left: parent.left; right: root.browserShown ? tools.left : parent.right; top: parent.top; margins: 14; rightMargin: root.browserShown ? 6 : 14 }
                 height: 40
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colLayer2
