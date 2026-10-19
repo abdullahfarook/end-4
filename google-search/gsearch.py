@@ -7,7 +7,7 @@ Empty query = stays hidden. First `show` starts the single instance (persistent 
 import os, sys, time, subprocess
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland")
 from urllib.parse import quote_plus
-from PySide6.QtCore import QUrl, QLockFile, Qt
+from PySide6.QtCore import QUrl, QLockFile, Qt, QTimer
 from PySide6.QtGui import QShortcut, QKeySequence, QColor, QPalette
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout
@@ -58,6 +58,7 @@ class Page(QWebEnginePage):
         tmp.urlChanged.connect(lambda u: (external(u), tmp.deleteLater()))
         return tmp
 
+open(os.path.join(RUN, "gsearch-status"), "w").close()  # fresh status file for this helper
 profile = QWebEngineProfile(NAME)
 view = QWebEngineView(Page(profile, app))
 # Themed scrollbars (colors come from the shell via env): thin rounded thumb, transparent track
@@ -81,11 +82,15 @@ lay = QVBoxLayout(win); lay.setContentsMargins(0, 8, 0, 0); lay.setSpacing(0); l
 view.settings().setAttribute(view.settings().WebAttribute.PlaybackRequiresUserGesture, True)
 view.page().setBackgroundColor(QColor(os.environ.get("GSEARCH_BG", "#1f1f1f")))
 
-QShortcut(QKeySequence("Esc"), win, activated=app.quit)  # the popup closes when this process exits
+def esc():
+    emit("exit"); QTimer.singleShot(50, app.quit)
+QShortcut(QKeySequence("Esc"), win, activated=esc)  # the popup closes when this process exits
 
 last = {"q": None}
-def emit(m):  # status lines for the popup (QML) on stdout
-    print(m, flush=True)
+STATUS = os.path.join(RUN, "gsearch-status")
+def emit(m):  # status lines for the popup (QML tails this file; the helper runs detached so it outlives the popup during the slide-out)
+    with open(STATUS, "a") as f:
+        f.write(m + "\n")
 view.loadStarted.connect(lambda: last["q"] and emit("loading"))
 view.loadProgress.connect(lambda p: last["q"] and emit(f"progress {p}"))
 state = {"revealed": False}

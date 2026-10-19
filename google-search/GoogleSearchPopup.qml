@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 // Google widget: one card (search field + progress line); the results are a real QtWebEngine window (gsearch.py)
 // that appears under it only after the first search and tucks its top corners behind the card, so both read as one panel.
@@ -35,25 +36,33 @@ Scope {
         else if (!browserShown) loading = true; // first search: spinner in the card until the page is loaded
         Quickshell.execDetached([bin, "show", q]);
     }
-    onVisibleChanged: if (!visible) Quickshell.execDetached([bin, "hide"])
+    onVisibleChanged: if (!visible) closeBrowser()
 
-    // Hyprland maps the browser on the focused monitor; move it to the monitor this popup is on
-    Component.onCompleted: { moveTimer.interval = 600; moveTimer.restart() } // the window is mapped at open, so place it right away
-    onBrowserShownChanged: if (browserShown) { moveTimer.interval = 350; moveTimer.restart() }
-    Timer {
-        id: moveTimer
-        onTriggered: {
-            Quickshell.execDetached(["hyprctl", "dispatch", `hl.dsp.window.move({ monitor = "${panel.screen?.name ?? ""}", window = "class:gsearch" })`]);
-            if (interval < 1000) { interval = 1200; restart() }
-        }
+    // The browser window lives on its own special workspace (rule in google-search-rules.lua); toggling it slides the browser in/out with the
+    // curve/speed of the header layer. The scripts time the close against the layer's exit and keep the helper alive until the slide is done.
+    readonly property string scriptDir: Quickshell.env("HOME") + "/.config/hypr/custom"
+    property bool closed: false
+    Component.onCompleted: {
+        Quickshell.execDetached([scriptDir + "/gsearch-open.sh"]);
+        Quickshell.execDetached({
+            command: [bin, "show", ""],
+            environment: { GSEARCH_BG: String(Appearance.m3colors.m3surfaceContainer), GSEARCH_THUMB: String(Appearance.colors.colOutlineVariant), GSEARCH_THUMB_HOVER: String(Appearance.colors.colOutline) }
+        });
     }
+    function closeBrowser() {
+        if (closed) return;
+        closed = true;
+        Quickshell.execDetached([scriptDir + "/gsearch-close.sh"]);
+    }
+    Component.onDestruction: closeBrowser()
 
     Timer { interval: 400; running: true; onTriggered: root.openGrab = false }
     Timer { id: debounce; interval: 800; onTriggered: root.go() }
-    Process { // first instance = the browser server; exits on Esc in the browser or hide -> close the popup
+    // The helper runs detached (it must outlive this popup until the slide-out is done); it reports status lines to a file
+    readonly property string statusFile: (Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp") + "/gsearch-status"
+    Process {
         running: true
-        command: [root.bin, "show", ""]
-        environment: ({ GSEARCH_BG: String(Appearance.m3colors.m3surfaceContainer), GSEARCH_THUMB: String(Appearance.colors.colOutlineVariant), GSEARCH_THUMB_HOVER: String(Appearance.colors.colOutline) })
+        command: ["sh", "-c", 'touch "$1"; exec tail -n 0 -F "$1"', "_", root.statusFile]
         stdout: SplitParser {
             onRead: line => {
                 if (line === "shown") root.browserShown = true
@@ -61,9 +70,9 @@ Scope {
                 else if (line === "loading") { root.loading = true; root.progress = 0 }
                 else if (line.startsWith("progress ")) root.progress = Number(line.slice(9)) / 100
                 else if (line === "done" || line === "failed") root.loading = false
+                else if (line === "exit") root.visible = false // Esc in the browser
             }
         }
-        onExited: root.visible = false
     }
 
     // Click-away layer on every screen; on the popup's screen the browser area is left uncovered
@@ -98,6 +107,7 @@ Scope {
 
     PanelWindow {
         id: panel
+        screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? null // same monitor the special workspace opens on
         color: "transparent"
         anchors { top: true; left: true }
         implicitWidth: root.cardWidth + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin

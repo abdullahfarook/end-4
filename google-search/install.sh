@@ -12,6 +12,9 @@ for f in GoogleSearchButton.qml GoogleSearchPopup.qml; do
   install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
 install -Dm755 "$REPO/gsearch.py" "$HOME/.config/hypr/custom/gsearch.py"
+install -Dm755 "$REPO/gsearch-open.sh" "$HOME/.config/hypr/custom/gsearch-open.sh"
+install -Dm755 "$REPO/gsearch-close.sh" "$HOME/.config/hypr/custom/gsearch-close.sh"
+[ -e "$HOME/.config/hypr/custom/gsearch-close-delay" ] || install -Dm644 "$REPO/gsearch-close-delay" "$HOME/.config/hypr/custom/gsearch-close-delay"  # tuning knob, never overwritten
 python3 - "$BAR" "$KEYBINDS" "$REPO/google-search-rules.lua" <<'PY'
 import re, sys
 bar, kb, rules = sys.argv[1:4]
