@@ -36,6 +36,7 @@ Scope {
         suggestOpen = false;
         target.memQuery = q;
         target.history = [q].concat(target.history.filter(h => h.toLowerCase() !== q.toLowerCase())).slice(0, 50);
+        target.saveHistory();
         if (!browserShown) loading = true; // first search: spinner in the field until the page is loaded
         Quickshell.execDetached([bin, "show", q]);
     }
@@ -55,6 +56,7 @@ Scope {
     }
     function removeHistory(item) {
         target.history = target.history.filter(h => h !== item);
+        target.saveHistory();
         refreshSuggestions();
     }
     onVisibleChanged: if (!visible) closeBrowser()
@@ -65,6 +67,7 @@ Scope {
     property bool closed: false
     Component.onCompleted: {
         Quickshell.execDetached([scriptDir + "/gsearch-open.sh"]);
+        target.loadHistory(); // pick up changes saved by another bar's button
         const url = root.target.memUrl ?? "";
         if (url !== "") { // restore the last session: field text + exact page (selected, so typing replaces it)
             root.restoring = true;
@@ -81,6 +84,7 @@ Scope {
     function closeBrowser() {
         if (closed) return;
         closed = true;
+        if (query.trim() === "") { target.memUrl = ""; target.memQuery = "" } // cleared and closed: don't restore the last page next time
         Quickshell.execDetached([scriptDir + "/gsearch-close.sh"]);
     }
     Component.onDestruction: closeBrowser()

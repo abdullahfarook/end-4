@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.widgets
 
@@ -15,7 +16,20 @@ RippleButton {
     // Last session (kept in memory only, lost when the shell restarts): restored when the popup opens again
     property string memQuery: ""
     property string memUrl: ""
-    property var history: [] // recent searches / addresses, newest first (suggestions)
+    // Suggestion history (recent searches / addresses, newest first): saved to disk so it survives shell restarts.
+    // Every bar has its own button, so the popup reloads the file when it opens and saves after each change.
+    property var history: []
+    readonly property string historyFile: Quickshell.env("HOME") + "/.local/state/google-search-history.json"
+    FileView { id: store; path: root.historyFile; blockLoading: true; atomicWrites: true; watchChanges: false }
+    function loadHistory() {
+        try {
+            store.reload();
+            const j = JSON.parse(store.text());
+            if (Array.isArray(j)) history = j.filter(x => typeof x === "string").slice(0, 50);
+        } catch (e) {}
+    }
+    function saveHistory() { store.setText(JSON.stringify(history)) }
+    Component.onCompleted: loadHistory()
     onClicked: open = !open
 
     MaterialSymbol {
