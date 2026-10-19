@@ -21,12 +21,15 @@ Scope {
     property bool indexing: false
     property bool searching: false
     property int current: 0
-    property string sortKey: "relevance"   // relevance | name | type | size | date
+    property string sortKey: "name"   // relevance | name | type | size | date
     property string sortDir: ""            // "" = default order for the key | "asc" | "desc"
     // Effective direction: explicit choice, else the key's natural default (name/type A→Z, size/date big/new first)
     readonly property bool sortAsc: sortDir !== "" ? sortDir === "asc" : (sortKey === "relevance" || sortKey === "name" || sortKey === "type")
     property bool sortMenuOpen: false
     property bool helpOpen: false
+    property real cardW: 440
+    property real sizeW: 64
+    property real dateW: 100
     property real sortMenuX: 0
     property real sortMenuY: 0
     readonly property var sortDefs: [
@@ -52,7 +55,8 @@ Scope {
         return r;
     }
     function setSort(k) {
-        sortKey = k; sortDir = "";
+        if (sortKey === k) sortDir = sortAsc ? "desc" : "asc";
+        else { sortKey = k; sortDir = ""; }
         current = 0;
     }
     readonly property string home: Quickshell.env("HOME")
@@ -62,10 +66,11 @@ Scope {
     readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/file-search.json`
     property bool stateReady: false
     function saveState() {
-        if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query }));
+        if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query, cardW }));
     }
     onSortKeyChanged: saveState()
     onSortDirChanged: saveState()
+    onCardWChanged: saveState()
     onQueryChanged: saveState()
     FileView { id: stateView; path: root.stateFile; blockLoading: true; atomicWrites: true }
     Component.onCompleted: {
@@ -73,6 +78,7 @@ Scope {
             const j = JSON.parse(stateView.text());
             if (sortDefs.some(d => d.key === j.sortKey)) root.sortKey = j.sortKey;
             if (["", "asc", "desc"].includes(j.sortDir)) root.sortDir = j.sortDir;
+            if (typeof j.cardW === "number") root.cardW = Math.max(340, Math.min(900, j.cardW));
             if (j.scope === "home" || j.scope === "root") root.scope = j.scope;
             if (typeof j.query === "string" && j.query !== "") { input.text = j.query; input.selectAll(); }
         } catch (e) {}
@@ -105,7 +111,7 @@ Scope {
             '[ -s "$1" ] || exit 0; ' +
             // Like Everything: match the file name only, unless the query contains "/" (then match the whole path)
             'if [[ "$2" == */* ]]; then nth="1,2"; else nth="1"; fi; ' +
-            'fzf --filter "$2" --delimiter $\'\\t\' --nth "$nth" --tiebreak=length,index < "$1" 2>/dev/null | head -1500 | cut -f2- | ' +
+            'fzf --exact --filter "$2" --delimiter $\'\\t\' --nth "$nth" --tiebreak=length,index < "$1" 2>/dev/null | head -1500 | cut -f2- | ' +
             'xargs -d "\\n" -r stat --printf "%F\\t%s\\t%Y\\t%n\\n" 2>/dev/null',
             "_", idxFile, q];
         searchProc.running = true;
@@ -146,7 +152,7 @@ Scope {
         return `${v.toFixed(v < 10 ? 1 : 0)} ${u[i]}`;
     }
     function fmtDate(s) {
-        return Qt.formatDateTime(new Date(s * 1000), "yyyy-MM-dd HH:mm");
+        return Qt.formatDateTime(new Date(s * 1000), "yy-MM-dd HH:mm");
     }
     function iconFor(item) {
         if (item.kind === "dir") return "folder";
@@ -199,7 +205,7 @@ Scope {
         // Same geometry as the left sidebar: top/left/bottom anchored below the bar, hyprland outer gap around the card
         color: "transparent"
         anchors { top: true; left: true; bottom: true }
-        implicitWidth: 440 + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
+        implicitWidth: root.cardW + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
         mask: Region { item: card }
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
@@ -218,7 +224,7 @@ Scope {
         anchors.topMargin: Appearance.sizes.hyprlandGapsOut
         anchors.leftMargin: Appearance.sizes.hyprlandGapsOut
         anchors.bottomMargin: Appearance.sizes.hyprlandGapsOut
-        width: 440
+        width: root.cardW
         color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.normal
         border.width: 1
@@ -289,25 +295,6 @@ Scope {
                     }
                 }
                 RippleButton {
-                    id: sortBtn
-                    implicitHeight: 40
-                    implicitWidth: 40
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colLayer2
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    onClicked: {
-                        const p = mapToItem(card, 0, height + 4);
-                        root.sortMenuX = p.x; root.sortMenuY = p.y; root.sortMenuOpen = !root.sortMenuOpen;
-                    }
-                    contentItem: MaterialSymbol {
-                        horizontalAlignment: Text.AlignHCenter
-                        text: root.sortDir === "" ? "swap_vert" : root.sortDir === "asc" ? "arrow_upward" : "arrow_downward"
-                        iconSize: Appearance.font.pixelSize.larger
-                        color: root.sortDir === "" && root.sortKey === "relevance" ? Appearance.colors.colOnLayer2 : Appearance.colors.colPrimary
-                    }
-                    StyledToolTip { text: Translation.tr("Sort: %1 (%2)").arg(root.sortLabel).arg(root.sortDir === "" ? Translation.tr("default order") : root.sortDir === "asc" ? Translation.tr("ascending") : Translation.tr("descending")); visible: sortBtn.hovered }
-                }
-                RippleButton {
                     implicitHeight: 40; implicitWidth: 40
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colLayer2
@@ -322,6 +309,72 @@ Scope {
                 }
             }
 
+            component SortHead: RippleButton {
+                id: sk
+                property string key
+                property string label
+                property bool alignLeft: false
+                implicitHeight: 26
+                implicitWidth: contentItem.implicitWidth + 16
+                buttonRadius: Appearance.rounding.small
+                colBackground: "transparent"
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                onClicked: { root.setSort(key); input.forceActiveFocus() }
+                contentItem: RowLayout {
+                    spacing: 2
+                    Item { Layout.fillWidth: !sk.alignLeft; visible: !sk.alignLeft }
+                    StyledText { text: sk.label; font.pixelSize: Appearance.font.pixelSize.smaller; color: root.sortKey === sk.key ? Appearance.colors.colPrimary : Appearance.colors.colSubtext }
+                    MaterialSymbol {
+                        visible: root.sortKey === sk.key
+                        text: root.sortAsc ? "arrow_upward" : "arrow_downward"
+                        iconSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colPrimary
+                    }
+                    Item { Layout.fillWidth: sk.alignLeft; visible: sk.alignLeft }
+                }
+            }
+            // Column grip sits in the 4 px gap between columns (rows use the same 4 px spacing); drag left to widen the column on its right
+            component ColGrip: Item {
+                id: gr
+                property real startX: 0
+                property real startW: 0
+                property real value
+                property real minW: 44
+                signal resized(real w)
+                Layout.preferredWidth: 4
+                Layout.preferredHeight: 28
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 2; radius: 1
+                    height: gripArea.pressed || gripArea.containsMouse ? 18 : 12
+                    color: gripArea.pressed || gripArea.containsMouse ? Appearance.colors.colPrimary : Appearance.colors.colOutlineVariant
+                    Behavior on height { NumberAnimation { duration: 100 } }
+                }
+                MouseArea {
+                    id: gripArea
+                    anchors { fill: parent; leftMargin: -5; rightMargin: -5 }
+                    hoverEnabled: true
+                    cursorShape: Qt.SplitHCursor
+                    onPressed: mouse => { gr.startX = mapToItem(card, mouse.x, 0).x; gr.startW = gr.value }
+                    onPositionChanged: mouse => {
+                        if (pressed) gr.resized(Math.max(gr.minW, Math.min(220, gr.startW + gr.startX - mapToItem(card, mouse.x, 0).x)));
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 10
+                Layout.rightMargin: 10
+                Layout.fillHeight: false
+                Layout.preferredHeight: 28
+                spacing: 0
+                SortHead { Layout.fillWidth: true; key: "name"; label: Translation.tr("Name"); alignLeft: true }
+                ColGrip { value: root.sizeW; onResized: w => root.sizeW = w }
+                SortHead { Layout.preferredWidth: root.sizeW; key: "size"; label: Translation.tr("Size") }
+                ColGrip { value: root.dateW; minW: 80; onResized: w => root.dateW = w }
+                SortHead { Layout.preferredWidth: root.dateW; key: "date"; label: Translation.tr("Modified") }
+            }
+
             // Results
             StyledListView {
                 id: list
@@ -329,7 +382,7 @@ Scope {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
-                spacing: 4
+                spacing: 2
                 model: root.sortedResults
                 currentIndex: root.current
                 boundsBehavior: Flickable.StopAtBounds
@@ -340,7 +393,7 @@ Scope {
                     required property int index
                     readonly property bool sel: index === root.current
                     width: list.width
-                    implicitHeight: 58
+                    implicitHeight: 34
                     buttonRadius: Appearance.rounding.small
                     colBackground: sel ? Appearance.colors.colSecondaryContainer : "transparent"
                     colBackgroundHover: sel ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2Hover
@@ -355,46 +408,36 @@ Scope {
                         }
                     }
                     contentItem: RowLayout {
-                        spacing: 10
+                        spacing: 4
                         MaterialSymbol {
-                            Layout.leftMargin: 4
+                            Layout.leftMargin: 2
                             text: root.iconFor(row.modelData)
-                            iconSize: Appearance.font.pixelSize.huge
+                            iconSize: Appearance.font.pixelSize.larger
                             color: row.modelData.kind === "dir" ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer2
                         }
-                        ColumnLayout {
+                        StyledText {
                             Layout.fillWidth: true
-                            spacing: 0
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: row.modelData.path.split("/").pop() || "/"
-                                font.weight: Font.Medium
-                                elide: Text.ElideRight
-                                color: Appearance.colors.colOnLayer2
-                            }
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: root.prettyPath(row.modelData.path)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                elide: Text.ElideMiddle
-                                color: Appearance.colors.colSubtext
-                            }
+                            elide: Text.ElideRight
+                            color: Appearance.colors.colOnLayer2
+                            textFormat: Text.StyledText
+                            text: `${row.modelData.path.split("/").pop().replace(/&/g, "&amp;").replace(/</g, "&lt;") || "/"}  <font color="${Appearance.colors.colSubtext}">${root.prettyPath(root.parentOf(row.modelData.path)).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</font>`
                         }
-                        ColumnLayout {
-                            Layout.rightMargin: 6
-                            spacing: 0
-                            StyledText {
-                                Layout.alignment: Qt.AlignRight
-                                text: row.modelData.kind === "dir" ? Translation.tr("Folder") : root.fmtSize(row.modelData.size)
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnLayer2
-                            }
-                            StyledText {
-                                Layout.alignment: Qt.AlignRight
-                                text: root.fmtDate(row.modelData.mtime)
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.colors.colSubtext
-                            }
+                        StyledText {
+                            Layout.preferredWidth: root.sizeW
+                            text: row.modelData.kind === "dir" ? "" : root.fmtSize(row.modelData.size)
+                            horizontalAlignment: Text.AlignRight
+                            font.family: Appearance.font.family.monospace
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnLayer2
+                        }
+                        StyledText {
+                            Layout.preferredWidth: root.dateW
+                            Layout.rightMargin: 4
+                            text: root.fmtDate(row.modelData.mtime)
+                            horizontalAlignment: Text.AlignRight
+                            font.family: Appearance.font.family.monospace
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colSubtext
                         }
                     }
                 }
@@ -601,6 +644,27 @@ Scope {
                         }
                     }
                 }
+            }
+        }
+
+        // Drag the right edge to resize the widget width
+        MouseArea {
+            id: widthGrip
+            anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
+            width: 8
+            hoverEnabled: true
+            cursorShape: Qt.SplitHCursor
+            property real pressX: 0
+            onPressed: mouse => pressX = mouse.x
+            onPositionChanged: mouse => {
+                if (pressed) root.cardW = Math.max(340, Math.min(900, mapToItem(card, mouse.x, 0).x + width - pressX));
+            }
+            Rectangle {
+                anchors { right: parent.right; rightMargin: 2; verticalCenter: parent.verticalCenter }
+                width: 3; height: 40; radius: 1.5
+                opacity: widthGrip.pressed || widthGrip.containsMouse ? 1 : 0
+                color: Appearance.colors.colPrimary
+                Behavior on opacity { NumberAnimation { duration: 120 } }
             }
         }
 
