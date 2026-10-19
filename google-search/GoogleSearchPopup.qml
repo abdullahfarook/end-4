@@ -16,6 +16,7 @@ Scope {
     property bool visible: true
     property string query: ""
     property bool browserShown: false
+    property bool openGrab: true // exclusive keyboard focus right after opening
     property bool loading: false
     property real progress: 0
     property bool canBack: false
@@ -46,6 +47,7 @@ Scope {
         }
     }
 
+    Timer { interval: 400; running: true; onTriggered: root.openGrab = false }
     Timer { id: debounce; interval: 800; onTriggered: root.go() }
     Process { // first instance = the browser server; exits on Esc in the browser or hide -> close the popup
         running: true
@@ -104,9 +106,10 @@ Scope {
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:sidebarLeft"
         WlrLayershell.layer: WlrLayer.Overlay
-        // Exclusive only while a search is loading and the browser isn't up yet (the browser window would steal focus when it maps).
-        // Otherwise OnDemand: an exclusive layer makes Hyprland ignore clicks on windows and on the click-away layer.
-        WlrLayershell.keyboardFocus: (root.query.trim() !== "" && !root.browserShown) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+        // The field must own the keyboard on open and while the first search loads (the browser window would steal focus when it maps),
+        // so grab it exclusively for a moment / while loading; otherwise OnDemand, because an exclusive layer makes Hyprland
+        // ignore clicks on windows and on the click-away layer.
+        WlrLayershell.keyboardFocus: (root.openGrab || (root.query.trim() !== "" && !root.browserShown)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
         Component.onCompleted: input.forceActiveFocus()
 
         StyledRectangularShadow { target: card }
