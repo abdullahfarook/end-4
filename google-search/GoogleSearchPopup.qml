@@ -38,6 +38,7 @@ Scope {
     onVisibleChanged: if (!visible) Quickshell.execDetached([bin, "hide"])
 
     // Hyprland maps the browser on the focused monitor; move it to the monitor this popup is on
+    Component.onCompleted: { moveTimer.interval = 600; moveTimer.restart() } // the window is mapped at open, so place it right away
     onBrowserShownChanged: if (browserShown) { moveTimer.interval = 350; moveTimer.restart() }
     Timer {
         id: moveTimer

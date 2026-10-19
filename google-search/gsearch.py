@@ -82,11 +82,14 @@ QShortcut(QKeySequence("Esc"), view, activated=app.quit)  # the popup closes whe
 last = {"q": None}
 def emit(m):  # status lines for the popup (QML) on stdout
     print(m, flush=True)
-view.loadStarted.connect(lambda: emit("loading"))
-view.loadProgress.connect(lambda p: emit(f"progress {p}"))
+view.loadStarted.connect(lambda: last["q"] and emit("loading"))
+view.loadProgress.connect(lambda p: last["q"] and emit(f"progress {p}"))
+state = {"revealed": False}
 def finished(ok):
-    if not view.isVisible() and last["q"]:  # first results: reveal the window only once the page is loaded
-        view.show(); emit("shown")
+    if not last["q"]:
+        return
+    if not state["revealed"]:  # first results: the window is already mapped (behind the card); tell the popup to reveal it in place
+        state["revealed"] = True; emit("shown")
     emit("done" if ok else "failed")
 view.loadFinished.connect(finished)
 def nav(*_):
@@ -94,13 +97,16 @@ def nav(*_):
 view.urlChanged.connect(nav); view.loadFinished.connect(nav)
 
 def show(q):
-    if not q:  # nothing to show yet: stay hidden (blank launcher-like state)
-        view.hide(); last["q"] = None; return
+    if not q:  # back to the blank state: keep the (empty) window mapped, covered by the popup card
+        if last["q"]:
+            last["q"] = None; state["revealed"] = False
+            view.load(QUrl("about:blank"))
+        return
     if q != last["q"]:
         last["q"] = q
         view.load(QUrl("https://www.google.com/search?q=" + quote_plus(q)))
-    elif not view.isVisible():
-        view.show(); emit("shown"); emit("done")
+    elif not state["revealed"]:
+        state["revealed"] = True; emit("shown"); emit("done")
 
 server = QLocalServer(); QLocalServer.removeServer(NAME); server.listen(NAME)
 def on_conn():
@@ -117,6 +123,7 @@ def on_conn():
     s.readyRead.connect(rd)
 server.newConnection.connect(on_conn)
 
+view.show()  # mapped right away (slides in with the popup header), hidden behind the popup card until results are ready
 show(arg)
 lock.unlock()
 sys.exit(app.exec())
