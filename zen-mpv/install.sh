@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Zen (native, pacman zen-browser-bin) "Open in mpv" via the ff2mpv extension: host script + native-messaging manifest + window rules (idempotent).
+# Needs: mpv, yt-dlp, the ff2mpv extension (ff2mpv@yossarian.net) installed in Zen.
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")" && pwd)"
+ZEN="$HOME/.zen"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
+BACKUP="$HOME/backups/zen-mpv/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BACKUP/"
+[ -d "$ZEN/native-messaging-hosts" ] && cp -r "$ZEN/native-messaging-hosts" "$BACKUP/" || true
+install -Dm755 "$REPO/ff2mpv-host.py" "$HOME/.local/bin/ff2mpv-host"
+mkdir -p "$ZEN/native-messaging-hosts"
+cat > "$ZEN/native-messaging-hosts/ff2mpv.json" <<JSON
+{"name": "ff2mpv", "description": "ff2mpv native host", "path": "$HOME/.local/bin/ff2mpv-host", "type": "stdio", "allowed_extensions": ["ff2mpv@yossarian.net"]}
+JSON
+python3 - "$KEYBINDS" "$REPO/zen-mpv-rules.lua" <<'PY'
+import re, sys
+kb, rules = sys.argv[1:3]
+snippet = open(rules).read().rstrip("\n"); t = open(kb).read()
+pat = r"-- >>> zen-mpv >>>.*?-- <<< zen-mpv <<<"
+t = re.sub(pat, lambda _: snippet, t, flags=re.S) if re.search(pat, t, re.S) else t.rstrip("\n") + "\n\n" + snippet + "\n"
+open(kb, "w").write(t)
+PY
+echo "Done. Zen picks up the manifest on the next ff2mpv click."
