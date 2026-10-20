@@ -9,12 +9,24 @@ if len(n) < 4:
 raw = sys.stdin.buffer.read(struct.unpack("=I", n)[0])
 LOG = os.path.expanduser("~/.cache/zen-mpv.log")
 open(LOG, "a").write(raw.decode(errors="replace") + "\n")  # last messages from the extension, for debugging
-url = json.loads(raw)["url"]
+msg = json.loads(raw)
+url = msg["url"]
+stream = bool(msg.get("stream"))          # from the mpv Stream Sniffer extension: a detected HLS/DASH/file address, not a page
+referer, origin = msg.get("referer") or "", msg.get("origin") or ""
 if not url.startswith(("http://", "https://", "file://")):
     sys.exit(1)
 profile = os.path.expanduser("~/.zen/c0u92kn2.Default (release)")  # YouTube's bot check needs the browser's cookies
-subprocess.Popen(
-    ["mpv", "--config-dir=" + os.path.expanduser("~/.config/mpv-upscale"), "--title=zen-mpv", "--force-window=immediate", "--keep-open=yes", "--osc=yes",
-     "--ytdl-format=bv*[height<=1080]+ba/b[height<=1080]/b",
-     "--ytdl-raw-options=cookies-from-browser=firefox:" + profile.replace(":", "\\:"), "--", url],
-    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+# No window is forced open (force-window=no): mpv only shows one once it has a video, so a page without video never flashes a blank window.
+# Run mpv under a tiny shell watcher: when it cannot play the page (exit code 2), say so with a notification.
+cmd = ["mpv", "--config-dir=" + os.path.expanduser("~/.config/mpv-upscale"), "--title=zen-mpv", "--force-window=no", "--network-timeout=15", "--keep-open=yes", "--osc=yes",
+       "--ytdl-format=bv*[height<=1080]+ba/b[height<=1080]/b",
+       "--ytdl-raw-options=cookies-from-browser=firefox:" + profile.replace(":", "\\:"), ] + (["--ytdl=no"] if stream else []) \
+       + (["--referrer=" + referer] if referer.startswith("http") else []) \
+       + (["--http-header-fields=Origin: " + origin] if origin.startswith("http") else []) + ["--", url]
+script = '"$@"; [ $? -eq 2 ] && notify-send -a "Open in mpv" "No video found" "mpv could not find a playable video on this page (no stream was detected and yt-dlp does not know the site). Start playback in the page first, then try again."'
+subprocess.Popen(["sh", "-c", script, "sh"] + cmd,
+                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+# Answer the extension: it awaits a reply, and a host that exits silently makes it report "An unexpected error occurred" even though mpv started
+reply = json.dumps({"ok": True}).encode()
+sys.stdout.buffer.write(struct.pack("=I", len(reply)) + reply)
+sys.stdout.buffer.flush()

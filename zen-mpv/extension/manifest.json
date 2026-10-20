@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+  "name": "mpv Stream Sniffer",
+  "version": "1.0",
+  "description": "Remembers the video streams (HLS/DASH/mp4) a tab loads; the toolbar button plays the best one in mpv (with the right referer), else the page address.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "mpv-sniffer@local"
+    }
+  },
+  "permissions": [
+    "webRequest",
+    "<all_urls>",
+    "tabs",
+    "nativeMessaging",
+    "notifications"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_action": {
+    "default_title": "Play in mpv (detected stream or page)",
+    "default_area": "navbar",
+    "default_icon": {
+      "48": "icon.svg"
+    }
+  },
+  "icons": {
+    "48": "icon.svg"
+  },
+  "commands": {
+    "_execute_browser_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+M"
+      },
+      "description": "Play the detected stream (or page) in mpv"
+    }
+  }
+}

@@ -5,7 +5,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 ZEN="$HOME/.zen"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
 BACKUP="$HOME/backups/zen-mpv/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BACKUP/"
-[ -d "$ZEN/native-messaging-hosts" ] && cp -r "$ZEN/native-messaging-hosts" "$BACKUP/" || true
+[ -d "$HOME/.mozilla/native-messaging-hosts" ] && cp -r "$HOME/.mozilla/native-messaging-hosts" "$BACKUP/" || true
 # mpv config for the Zen window (upscaler picker); shaders are downloaded, not stored in git
 mkdir -p "$HOME/.config/mpv-upscale/scripts"
 install -Dm644 "$REPO/mpv-upscale/mpv.conf" "$HOME/.config/mpv-upscale/mpv.conf"
@@ -13,10 +13,14 @@ install -Dm644 "$REPO/mpv-upscale/input.conf" "$HOME/.config/mpv-upscale/input.c
 install -Dm644 "$REPO/mpv-upscale/scripts/upscale-menu.lua" "$HOME/.config/mpv-upscale/scripts/upscale-menu.lua"
 "$REPO/mpv-upscale/fetch-shaders.sh"
 install -Dm755 "$REPO/ff2mpv-host.py" "$HOME/.local/bin/ff2mpv-host"
-mkdir -p "$ZEN/native-messaging-hosts"
-cat > "$ZEN/native-messaging-hosts/ff2mpv.json" <<JSON
-{"name": "ff2mpv", "description": "ff2mpv native host", "path": "$HOME/.local/bin/ff2mpv-host", "type": "stdio", "allowed_extensions": ["ff2mpv@yossarian.net"]}
+# Zen (native) reads the standard Firefox folder ~/.mozilla/native-messaging-hosts (not ~/.zen), so the manifest goes there
+NMH="$HOME/.mozilla/native-messaging-hosts"; mkdir -p "$NMH"
+cat > "$NMH/ff2mpv.json" <<JSON
+{"name": "ff2mpv", "description": "ff2mpv native host", "path": "$HOME/.local/bin/ff2mpv-host", "type": "stdio", "allowed_extensions": ["ff2mpv@yossarian.net", "mpv-sniffer@local"]}
 JSON
+# mpv Stream Sniffer extension: packaged only, NOT installed into the profile (it is unsigned; loading it is up to you: about:debugging ->
+# This Firefox -> Load Temporary Add-on -> extension/manifest.json, or sign it with Mozilla and install the signed file)
+( cd "$REPO/extension" && rm -f "$HOME/.config/mpv-upscale/mpv-sniffer.xpi" && bsdtar --format zip -cf "$HOME/.config/mpv-upscale/mpv-sniffer.xpi" . )
 python3 - "$KEYBINDS" "$REPO/zen-mpv-rules.lua" <<'PY'
 import re, sys
 kb, rules = sys.argv[1:3]
