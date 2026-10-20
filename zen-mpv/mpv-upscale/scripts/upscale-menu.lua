@@ -7,6 +7,13 @@ local dir = mp.command_native({"expand-path", "~~/shaders/"})
 local K = "KrigBilateral.glsl"
 local presets = {
     {"Off (built-in Lanczos)", {}},
+    {"Native: bilinear (fastest, soft)", {}, "bilinear"},
+    {"Native: bicubic_fast", {}, "bicubic_fast"},
+    {"Native: spline36", {}, "spline36"},
+    {"Native: lanczos", {}, "lanczos"},
+    {"Native: ewa_lanczos (smooth)", {}, "ewa_lanczos"},
+    {"Native: ewa_lanczossharp (default)", {}, "ewa_lanczossharp"},
+    {"Native: ewa_lanczos4sharpest (sharpest)", {}, "ewa_lanczos4sharpest"},
     {"Chroma only: KrigBilateral", {K}},
     {"FSR (fast, sharp)", {"FSR.glsl"}},
     {"NVIDIA Image Scaling (NVScaler)", {"NVScaler.glsl"}},
@@ -41,6 +48,9 @@ local function apply(i)
     local list = {}
     for _, f in ipairs(presets[i][2]) do list[#list + 1] = dir .. f end
     mp.set_property_native("glsl-shaders", list)
+    -- built-in scaler: a "Native:" preset picks it, everything else goes back to the default
+    local sc = presets[i][3] or "ewa_lanczossharp"
+    mp.set_property("scale", sc); mp.set_property("cscale", sc)
     -- say whether the shaders can act: they only run when the picture is enlarged (>= ~1.2x), never at 1:1 or when shrinking
     local vp, od = mp.get_property_native("video-params"), mp.get_property_native("osd-dimensions")
     local note = ""
