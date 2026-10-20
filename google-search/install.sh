@@ -18,6 +18,8 @@ rm -f "$HOME/.config/hypr/custom/gsearch.py"
 OLD="$HOME/.local/share/gsearch.py/QtWebEngine/gsearch"; NEW="$HOME/.local/share/gsearch"
 [ -d "$OLD" ] && [ ! -e "$NEW/.migrated-from-pyside" ] && { [ -d "$NEW" ] && mv "$NEW" "$HOME/backups/gsearch-profile-$(date +%Y%m%d-%H%M%S)"; cp -r "$OLD" "$NEW"; touch "$NEW/.migrated-from-pyside"; } || true
 install -Dm755 "$REPO/gsearch-resize.sh" "$HOME/.config/hypr/custom/gsearch-resize.sh"
+install -Dm644 "$REPO/gsearch-pip.qml" "$HOME/.config/hypr/custom/gsearch-pip.qml"
+install -Dm755 "$REPO/gsearch-popout.sh" "$HOME/.config/hypr/custom/gsearch-popout.sh"
 install -Dm755 "$REPO/gsearch-open.sh" "$HOME/.config/hypr/custom/gsearch-open.sh"
 install -Dm755 "$REPO/gsearch-close.sh" "$HOME/.config/hypr/custom/gsearch-close.sh"
 [ -e "$HOME/.config/hypr/custom/gsearch-close-delay" ] || install -Dm644 "$REPO/gsearch-close-delay" "$HOME/.config/hypr/custom/gsearch-close-delay"  # tuning knob, never overwritten

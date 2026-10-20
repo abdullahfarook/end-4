@@ -24,6 +24,8 @@ Scope {
     property real progress: 0
     property bool canBack: false
     property bool canForward: false
+    property bool hasVideo: false
+    property bool fullscreen: false // the page video is fullscreen: hide the card
     readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.sh"
     property int cardWidth: target.memWidth
     readonly property int minWidth: 320
@@ -104,6 +106,10 @@ Scope {
         stdout: SplitParser {
             onRead: line => {
                 if (line === "shown") { root.browserShown = true; if (root.cardWidth !== 440) root.applyWidth(); Quickshell.execDetached([root.scriptDir + "/gsearch-open.sh"]) } // open.sh is idempotent: re-shows the browser workspace if it got out of sync
+                else if (line.startsWith("popout ")) { const i = line.indexOf(" ", 7); Quickshell.execDetached([root.scriptDir + "/gsearch-popout.sh", line.slice(7, i), line.slice(i + 1)]) }
+                else if (line === "popout-none") Quickshell.execDetached(["notify-send", "-a", "Google", "No video on this page"])
+                else if (line.startsWith("fullscreen ")) root.fullscreen = line.endsWith("1")
+                else if (line.startsWith("video ")) root.hasVideo = line.endsWith("1")
                 else if (line.startsWith("nav ")) { const p = line.split(" "); root.canBack = p[1] === "1"; root.canForward = p[2] === "1" }
                 else if (line.startsWith("url ")) root.target.memUrl = line.slice(4)
                 else if (line === "loading") { root.loading = true; root.progress = 0 }
@@ -146,6 +152,7 @@ Scope {
 
     PanelWindow {
         id: panel
+        visible: !root.fullscreen
         screen: Quickshell.screens.find(s => s.name === root.screenName) ?? null // monitor it was opened on (the special workspace opens there too)
         color: "transparent"
         anchors { top: true; left: true }
@@ -312,10 +319,12 @@ Scope {
                         { icon: "arrow_back", tip: "Back", cmd: "back", on: root.canBack },
                         { icon: "arrow_forward", tip: "Forward", cmd: "forward", on: root.canForward },
                         { icon: root.loading ? "close" : "refresh", tip: root.loading ? "Stop" : "Reload", cmd: root.loading ? "stop" : "reload", on: true },
+                        { icon: "picture_in_picture_alt", tip: "Pop out video", cmd: "popout", on: true },
                         { icon: "open_in_new", tip: "Open in browser", cmd: "open", on: true }
                     ]
                     delegate: RippleButton {
                         required property var modelData
+                        visible: modelData.cmd !== "popout" || root.hasVideo
                         implicitWidth: 26; implicitHeight: 26
                         buttonRadius: Appearance.rounding.full
                         colBackground: "transparent"

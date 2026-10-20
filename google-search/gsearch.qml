@@ -20,6 +20,13 @@ Window {
     property bool altDown: false
     property string lastSeq: ""
 
+    readonly property string pipScript: "(function(){if(window.__gspip)return;window.__gspip=1;"
+        + "function best(){return [].slice.call(document.querySelectorAll('video')).sort(function(a,b){return (!a.paused?-1:0)-(!b.paused?-1:0)||b.videoWidth*b.videoHeight-a.videoWidth*a.videoHeight})[0]}"
+        + "setInterval(function(){var v=best();if(v)window.top.postMessage({gsvid:1,t:v.currentTime,playing:!v.paused,href:location.href,area:v.videoWidth*v.videoHeight},'*')},500);"
+        + "window.addEventListener('message',function(e){var d=e.data;if(!d)return;"
+        + "if(d.gspause){[].forEach.call(document.querySelectorAll('video'),function(v){v.pause()});[].forEach.call(document.querySelectorAll('iframe'),function(f){try{f.contentWindow.postMessage(d,'*')}catch(x){}})}"
+        + "if(d.gsvid&&window===window.top){d.ts=Date.now();var c=window.__gsbest;if(!c||d.ts-c.ts>2000||(d.playing&&!c.playing)||(d.playing===c.playing&&d.area>=c.area))window.__gsbest=d}});})()"
+
     function emit(m) { console.log("GS " + m) }
     function external(u) { Qt.openUrlExternally(u) }
 
@@ -45,6 +52,15 @@ Window {
         if (q !== lastQ) { lastQ = q; view.url = targetUrl(q) }
         else if (!revealed) { revealed = true; emit("shown"); emit("done") }
     }
+    // Pull the playing (else largest) <video> out, also from iframes (Google's inline YouTube preview): every frame reports its best video to the
+    // top frame (pipScript below); this pauses them and tells the popup to start a floating mpv on that frame's URL at the same time
+    function popout() {
+        view.runJavaScript("(function(){var o=window.__gsbest;if(!o||Date.now()-o.ts>2500)return null;"
+            + "window.postMessage({gspause:1},'*');return JSON.stringify({t:o.t,u:/vid:|embed\\//.test(o.href)?o.href:location.href})})()", function(r) {
+            if (!r) emit("popout-none")
+            else { var o = JSON.parse(r); emit("popout " + Math.floor(o.t) + " " + o.u) }
+        })
+    }
     function run(c, a) {
         if (c === "hide") Qt.quit()
         else if (c === "back") view.goBack()
@@ -52,11 +68,12 @@ Window {
         else if (c === "reload") view.reload()
         else if (c === "stop") view.stop()
         else if (c === "open") external(view.url)
+        else if (c === "popout") popout()
         else if (c === "goto") goto(a)
         else show(a)
     }
 
-    Shortcut { sequence: "Esc"; onActivated: { win.emit("exit"); Qt.quit() } }
+    Shortcut { sequence: "Esc"; onActivated: { if (win.visibility === Window.FullScreen) view.fullScreenCancelled(); else { win.emit("exit"); Qt.quit() } } }
 
     WebEngineProfile {
         id: profile
@@ -71,9 +88,20 @@ Window {
         anchors { fill: parent; topMargin: 8 }  // top padding is hidden under the popup card
         backgroundColor: win.bg
         settings.playbackRequiresUserGesture: true
+        settings.fullScreenSupportEnabled: true
+        // Video fullscreen button: the whole window goes fullscreen (the popup hides its card meanwhile, see "fullscreen" status)
+        onFullScreenRequested: (req) => {
+            req.accept()
+            win.visibility = req.toggleOn ? Window.FullScreen : Window.Windowed
+            win.emit("fullscreen " + (req.toggleOn ? 1 : 0))
+        }
 
         // Themed scrollbars: thin rounded thumb, transparent track
         userScripts.collection: [ {
+            name: "pip", injectionPoint: WebEngineScript.DocumentReady,
+            worldId: WebEngineScript.MainWorld, runsOnSubFrames: true,
+            sourceCode: win.pipScript
+        }, {
             name: "scrollbar", injectionPoint: WebEngineScript.DocumentReady,
             worldId: WebEngineScript.MainWorld, runsOnSubFrames: true,
             sourceCode: "(function(){var s=document.createElement('style');s.textContent="
@@ -108,9 +136,19 @@ Window {
             if (loadProgress >= 100 && !win.revealed) { win.revealed = true; win.emit("shown"); win.emit("done") }
         }
         onUrlChanged: if (win.lastQ && url.toString() !== "about:blank") {
+            if (win.hasVideo) { win.hasVideo = false; win.emit("video 0") }  // a new page: the pop-out button hides until a video shows up
             win.emit("url " + url.toString())  // the popup remembers the page (memory only) to restore it on reopen
             win.emit("nav " + (canGoBack ? 1 : 0) + " " + (canGoForward ? 1 : 0))
         }
+    }
+
+    // Tell the popup whether a video is present (it only shows the pop-out button then)
+    property bool hasVideo: false
+    Timer {
+        interval: 700; running: win.lastQ !== ""; repeat: true
+        onTriggered: view.runJavaScript("!!(window.__gsbest&&Date.now()-window.__gsbest.ts<2500)", function(r) {
+            if (!!r !== win.hasVideo) { win.hasVideo = !!r; win.emit("video " + (r ? 1 : 0)) }
+        })
     }
 
     // Command channel: gsearch.sh atomically replaces the file; a new sequence number = a new command
