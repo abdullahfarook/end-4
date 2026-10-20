@@ -37,7 +37,7 @@ head = f"""{ind}RowLayout {{ // icon row: AI button always visible, the rest sli
 {ind}    property bool hot: false
 {ind}    readonly property bool wantOpen: barLeftSideMouseArea.hovered
 {ind}    onWantOpenChanged: {{ if (wantOpen) {{ closeTimer.stop(); hot = true }} else closeTimer.restart() }}
-{ind}    Timer {{ id: closeTimer; interval: 350; onTriggered: iconRow.hot = false }}
+{ind}    Timer {{ id: closeTimer; interval: 700; onTriggered: iconRow.hot = false }}
 """
 s = s[:start] + head + chunk.rstrip(" ") + f"{ind}}}\n" + s[end:]
 open(p, "w").write(s)

@@ -10,7 +10,7 @@ if "rtClose" not in s:
     new = old + """            hoverEnabled: true
             property bool hot: false
             onContainsMouseChanged: { if (containsMouse) { rtClose.stop(); hot = true } else rtClose.restart() }
-            Timer { id: rtClose; interval: 350; onTriggered: rightCenterGroup.hot = false }
+            Timer { id: rtClose; interval: 700; onTriggered: rightCenterGroup.hot = false }
 """
     assert old in s, "rightCenterGroup not found"
     s = s.replace(old, new, 1)

@@ -21,7 +21,7 @@ Item {
     visible: implicitWidth > 0
 
     // opens with a decelerating ease, closes with a symmetric ease so the end of the close has no long sub-pixel tail
-    Behavior on p { NumberAnimation { duration: root.shown ? 280 : 240; easing.type: root.shown ? Easing.OutCubic : Easing.InOutCubic } }
+    Behavior on p { NumberAnimation { duration: root.shown ? 260 : 200; easing.type: root.shown ? Easing.OutCubic : Easing.InOutCubic } }
 
     Item {
         id: holder
