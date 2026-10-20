@@ -42,6 +42,7 @@ head = f"""{ind}RowLayout {{ // icon row: AI button always visible, the rest sli
 s = s[:start] + head + chunk.rstrip(" ") + f"{ind}}}\n" + s[end:]
 open(p, "w").write(s)
 PY
+python3 "$(dirname "$0")/reorder.py" "$BAR"
 python3 "$(dirname "$0")/patch-right.py" "$BAR" "$Q/ClockWidget.qml"
 python3 "$(dirname "$0")/patch-util.py" "$Q/UtilButtons.qml"
 echo "Done. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
