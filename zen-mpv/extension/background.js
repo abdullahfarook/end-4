@@ -50,9 +50,15 @@ function best(list) {
   return [...list].sort((a, b) => rank(b) - rank(a))[0];
 }
 
+function ranked(list) { const b = best(list); return b ? [b, ...list.filter(x => x !== b).sort((x, y) => y.ts - x.ts)] : []; }
+
 browser.browserAction.onClicked.addListener(async tab => {
-  const s = best(streams.get(tab.id) || []);
-  const msg = s ? { url: s.url, stream: true, referer: s.referer || tab.url, origin: s.origin, page: tab.url } : { url: tab.url };
+  const list = ranked(streams.get(tab.id) || []);
+  const s = list[0];
+  // The best stream plays at once; the others go along as `sources` for mpv's right-click menu (Sources...)
+  const msg = s ? { url: s.url, stream: true, referer: s.referer || tab.url, origin: s.origin, page: tab.url,
+                    sources: list.slice(0, 15).map(x => ({ url: x.url, kind: x.kind, referer: x.referer || tab.url, origin: x.origin })) }
+                : { url: tab.url };
   try { await browser.runtime.sendNativeMessage("ff2mpv", msg); }
   catch (e) { browser.notifications.create({ type: "basic", title: "mpv Stream Sniffer", message: "Native host failed: " + e.message, iconUrl: "icon.svg" }); }
 });

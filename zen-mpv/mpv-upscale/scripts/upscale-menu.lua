@@ -1,4 +1,4 @@
--- Right-click opens a small menu (Upscaler / Load subtitles / Fullscreen / Exit); "Upscaler" opens the full list (type to filter, Up/Down, Enter). `u` opens the list directly,
+-- Right-click opens a small menu (Upscaler / Sources / Smoother motion / Clean up compression damage / Load subtitles / Fullscreen / Exit); "Upscaler" opens the full list (type to filter, Up/Down, Enter). `u` opens the list directly,
 -- Ctrl+u / Ctrl+Shift+u cycle. Switches at runtime, no restart.
 -- Shaders live in <config dir>/shaders (see fetch-shaders.sh). Hooks only run when they actually upscale (output larger than the video).
 local mp = require 'mp'
@@ -41,7 +41,15 @@ local function apply(i)
     local list = {}
     for _, f in ipairs(presets[i][2]) do list[#list + 1] = dir .. f end
     mp.set_property_native("glsl-shaders", list)
-    mp.osd_message("Upscaler: " .. presets[i][1], 2.5)
+    -- say whether the shaders can act: they only run when the picture is enlarged (>= ~1.2x), never at 1:1 or when shrinking
+    local vp, od = mp.get_property_native("video-params"), mp.get_property_native("osd-dimensions")
+    local note = ""
+    if vp and vp.w and od and od.w and #list > 0 then
+        local scale = (od.w - od.ml - od.mr) / vp.w
+        note = string.format("\nvideo %dx%d shown at x%.2f: %s", vp.w, vp.h, scale,
+            scale >= 1.2 and "shader active" or "shader idle (picture is not enlarged: make the window bigger or go fullscreen)")
+    end
+    mp.osd_message("Upscaler: " .. presets[i][1] .. note, 4)
 end
 
 local function open()
@@ -74,17 +82,107 @@ local function load_subs()
         end)
 end
 
+-- Sources: the streams the browser extension detected (best one already playing); pick another to switch, keeping the position
+local sources, current_src = {}, nil
+do
+    local path = mp.get_opt("zenmpv-sources")
+    if path and path ~= "" then
+        local f = io.open(path, "r")
+        if f then
+            local d = require('mp.utils').parse_json(f:read("*a")); f:close()
+            if d and d.sources then sources, current_src = d.sources, d.current end
+        end
+    end
+end
+
+local function source_label(i, src)
+    local host = src.url:match("^https?://([^/]+)") or "?"
+    local tail = (src.url:match("([^/?#]+)[^/]*$") or ""):sub(1, 30)
+    local q = src.url:match("(%d%d%d%d?)[pP]") or src.url:match("[_/%-](%d%d%d%d?)[_/%.]")
+    return string.format("%s %d. [%s%s] %s / %s", src.url == current_src and "●" or "  ", i, src.kind or "?", q and (" " .. q .. "p") or "", host:sub(1, 28), tail)
+end
+
+local switching, prev_src = false, nil
+
+local function load_source(src, pos)
+    mp.set_property("referrer", src.referer or "")
+    mp.set_property("http-header-fields", (src.origin and src.origin ~= "") and ("Origin: " .. src.origin) or "")
+    current_src = src.url
+    mp.commandv("loadfile", src.url, "replace", "-1", string.format("start=%.1f,ytdl=no", pos))
+end
+
+-- A source that cannot be opened must not close the window: stay idle during the switch and fall back to the previous source
+mp.register_event("file-loaded", function()
+    if switching then switching = false; mp.set_property("idle", "no") end
+end)
+mp.register_event("end-file", function(ev)
+    if switching and ev.reason == "error" and prev_src then
+        local back = prev_src
+        switching, prev_src = false, nil
+        mp.osd_message("That source could not be opened: back to the previous one", 4)
+        mp.add_timeout(0.2, function() load_source(back.src, back.pos); mp.set_property("idle", "no") end)
+    end
+end)
+
+local function pick_source()
+    local ok, input = pcall(require, 'mp.input')
+    if not (ok and input.select) or #sources == 0 then return end
+    local items, def = {}, 1
+    for i, src in ipairs(sources) do items[i] = source_label(i, src); if src.url == current_src then def = i end end
+    input.select({prompt = "Sources:", items = items, default_item = def, submit = function(n)
+        local src = sources[n]
+        if not src or src.url == current_src then return end
+        local pos = mp.get_property_number("time-pos") or 0
+        local before
+        for _, c in ipairs(sources) do if c.url == current_src then before = c end end
+        prev_src = before and {src = before, pos = pos} or nil
+        switching = true
+        mp.set_property("idle", "yes")
+        load_source(src, pos)
+        mp.osd_message("Source " .. n .. "/" .. #sources, 2.5)
+    end})
+end
+
+-- Toggles (per window): smoother motion = frame interpolation, compression cleanup = debanding
+local function smooth_on() return mp.get_property_native("interpolation") == true end
+local function deband_on() return mp.get_property_native("deband") == true end
+
+local function toggle_smooth()
+    if smooth_on() then
+        mp.set_property("interpolation", "no"); mp.set_property("video-sync", "audio")
+    else  -- needs display-resample sync; oversample blends frames without ghosting
+        mp.set_property("video-sync", "display-resample"); mp.set_property("tscale", "oversample"); mp.set_property("interpolation", "yes")
+    end
+    mp.osd_message("Smoother motion: " .. (smooth_on() and "on" or "off"), 2.5)
+end
+
+local function toggle_deband()
+    mp.set_property("deband", deband_on() and "no" or "yes")
+    mp.osd_message("Clean up compression damage: " .. (deband_on() and "on" or "off"), 2.5)
+end
+
 -- Right-click menu: Upscaler (opens the list above) / Exit
 local function context()
     local ok, input = pcall(require, 'mp.input')
     if not (ok and input.select) then return open() end
+    local menu_items, menu_actions = {"Upscaler"}, {"upscaler"}
+    if #sources > 0 then menu_items[#menu_items + 1] = "Sources (" .. #sources .. ")..."; menu_actions[#menu_actions + 1] = "sources" end
+    menu_items[#menu_items + 1] = "Smoother motion: " .. (smooth_on() and "ON" or "off"); menu_actions[#menu_actions + 1] = "smooth"
+    menu_items[#menu_items + 1] = "Clean up compression damage: " .. (deband_on() and "ON" or "off"); menu_actions[#menu_actions + 1] = "deband"
+    for _, e in ipairs({{"Load subtitles...", "subs"}, {"Fullscreen", "fullscreen"}, {"Exit", "exit"}}) do
+        menu_items[#menu_items + 1] = e[1]; menu_actions[#menu_actions + 1] = e[2]
+    end
     input.select({
         prompt = "Menu:",
-        items = {"Upscaler", "Load subtitles...", "Fullscreen", "Exit"},
+        items = menu_items,
         submit = function(n)  -- delay: the menu closes itself after submit
-            if n == 1 then mp.add_timeout(0.15, open)
-            elseif n == 2 then mp.add_timeout(0.15, load_subs)
-            elseif n == 3 then mp.add_timeout(0.15, function() mp.commandv("cycle", "fullscreen") end)
+            local what = menu_actions[n]
+            if what == "upscaler" then mp.add_timeout(0.15, open)
+            elseif what == "sources" then mp.add_timeout(0.15, pick_source)
+            elseif what == "smooth" then mp.add_timeout(0.15, toggle_smooth)
+            elseif what == "deband" then mp.add_timeout(0.15, toggle_deband)
+            elseif what == "subs" then mp.add_timeout(0.15, load_subs)
+            elseif what == "fullscreen" then mp.add_timeout(0.15, function() mp.commandv("cycle", "fullscreen") end)
             else mp.commandv("quit") end
         end,
     })

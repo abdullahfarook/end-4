@@ -13,6 +13,15 @@ msg = json.loads(raw)
 url = msg["url"]
 stream = bool(msg.get("stream"))          # from the mpv Stream Sniffer extension: a detected HLS/DASH/file address, not a page
 referer, origin = msg.get("referer") or "", msg.get("origin") or ""
+sources_arg = []
+if msg.get("sources"):                    # all detected streams: mpv's right-click menu > Sources lets you switch between them
+    sdir = os.path.expanduser("~/.cache/zen-mpv"); os.makedirs(sdir, exist_ok=True)
+    for old in sorted(os.listdir(sdir))[:-20]:   # keep only the newest files
+        try: os.remove(os.path.join(sdir, old))
+        except OSError: pass
+    spath = os.path.join(sdir, "sources-%d.json" % os.getpid())
+    json.dump({"current": url, "sources": msg["sources"]}, open(spath, "w"))
+    sources_arg = ["--script-opts-append=zenmpv-sources=" + spath]
 if not url.startswith(("http://", "https://", "file://")):
     sys.exit(1)
 profile = os.path.expanduser("~/.zen/c0u92kn2.Default (release)")  # YouTube's bot check needs the browser's cookies
@@ -22,7 +31,7 @@ cmd = ["mpv", "--config-dir=" + os.path.expanduser("~/.config/mpv-upscale"), "--
        "--ytdl-format=bv*[height<=1080]+ba/b[height<=1080]/b",
        "--ytdl-raw-options=cookies-from-browser=firefox:" + profile.replace(":", "\\:"), ] + (["--ytdl=no"] if stream else []) \
        + (["--referrer=" + referer] if referer.startswith("http") else []) \
-       + (["--http-header-fields=Origin: " + origin] if origin.startswith("http") else []) + ["--", url]
+       + (["--http-header-fields=Origin: " + origin] if origin.startswith("http") else []) + sources_arg + ["--", url]
 script = '"$@"; [ $? -eq 2 ] && notify-send -a "Open in mpv" "No video found" "mpv could not find a playable video on this page (no stream was detected and yt-dlp does not know the site). Start playback in the page first, then try again."'
 subprocess.Popen(["sh", "-c", script, "sh"] + cmd,
                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
