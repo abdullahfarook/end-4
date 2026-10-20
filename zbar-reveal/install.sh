@@ -4,7 +4,7 @@
 # Buttons with an unread count (Mail, Teams) stay visible until the count is 0. Run AFTER the other bar installers (patches BarContent.qml; idempotent).
 set -euo pipefail
 Q="$HOME/.config/quickshell/ii/modules/ii/bar"; BAR="$Q/BarContent.qml"
-B="$HOME/backups/zbar-reveal/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$BAR" "$Q/ClockWidget.qml" "$B/"
+B="$HOME/backups/zbar-reveal/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$BAR" "$Q/ClockWidget.qml" "$Q/UtilButtons.qml" "$B/"
 install -Dm644 "$(dirname "$0")/RevealSlot.qml" "$Q/RevealSlot.qml"
 python3 - "$BAR" <<'PY'
 import re, sys
@@ -43,4 +43,5 @@ s = s[:start] + head + chunk.rstrip(" ") + f"{ind}}}\n" + s[end:]
 open(p, "w").write(s)
 PY
 python3 "$(dirname "$0")/patch-right.py" "$BAR" "$Q/ClockWidget.qml"
+python3 "$(dirname "$0")/patch-util.py" "$Q/UtilButtons.qml"
 echo "Done. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"

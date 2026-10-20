@@ -22,13 +22,10 @@ if "rtClose" not in s:
                     Layout.alignment: Qt.AlignVCenter
                 }
 """
-    new = """                RevealSlot {
-                    open: rightCenterGroup.hot
-                    gap: 0
+    new = """                UtilButtons {
+                    visible: (Config.options.bar.verbose && root.useShortenedForm === 0)
+                    expanded: rightCenterGroup.hot
                     Layout.alignment: Qt.AlignVCenter
-                    UtilButtons {
-                        visible: (Config.options.bar.verbose && root.useShortenedForm === 0)
-                    }
                 }
 """
     assert old in s, "UtilButtons block not found"
