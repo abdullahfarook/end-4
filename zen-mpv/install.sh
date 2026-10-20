@@ -6,6 +6,12 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 ZEN="$HOME/.zen"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
 BACKUP="$HOME/backups/zen-mpv/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BACKUP/"
 [ -d "$ZEN/native-messaging-hosts" ] && cp -r "$ZEN/native-messaging-hosts" "$BACKUP/" || true
+# mpv config for the Zen window (upscaler picker); shaders are downloaded, not stored in git
+mkdir -p "$HOME/.config/mpv-upscale/scripts"
+install -Dm644 "$REPO/mpv-upscale/mpv.conf" "$HOME/.config/mpv-upscale/mpv.conf"
+install -Dm644 "$REPO/mpv-upscale/input.conf" "$HOME/.config/mpv-upscale/input.conf"
+install -Dm644 "$REPO/mpv-upscale/scripts/upscale-menu.lua" "$HOME/.config/mpv-upscale/scripts/upscale-menu.lua"
+"$REPO/mpv-upscale/fetch-shaders.sh"
 install -Dm755 "$REPO/ff2mpv-host.py" "$HOME/.local/bin/ff2mpv-host"
 mkdir -p "$ZEN/native-messaging-hosts"
 cat > "$ZEN/native-messaging-hosts/ff2mpv.json" <<JSON

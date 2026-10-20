@@ -14,8 +14,7 @@ if not url.startswith(("http://", "https://", "file://")):
     sys.exit(1)
 profile = os.path.expanduser("~/.zen/c0u92kn2.Default (release)")  # YouTube's bot check needs the browser's cookies
 subprocess.Popen(
-    ["mpv", "--title=zen-mpv", "--force-window=immediate", "--keep-open=yes", "--osc=yes",
-     "--script-opts=osc-vidscale=no,osc-scalewindowed=1.8",
-     "--ytdl-format=bv*[height<=720]+ba/b[height<=720]/b",
+    ["mpv", "--config-dir=" + os.path.expanduser("~/.config/mpv-upscale"), "--title=zen-mpv", "--force-window=immediate", "--keep-open=yes", "--osc=yes",
+     "--ytdl-format=bv*[height<=1080]+ba/b[height<=1080]/b",
      "--ytdl-raw-options=cookies-from-browser=firefox:" + profile.replace(":", "\\:"), "--", url],
     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
