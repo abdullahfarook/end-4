@@ -1,4 +1,4 @@
--- Right-click opens a small menu (Upscaler / Exit); "Upscaler" opens the full list (type to filter, Up/Down, Enter). `u` opens the list directly,
+-- Right-click opens a small menu (Upscaler / Load subtitles / Fullscreen / Exit); "Upscaler" opens the full list (type to filter, Up/Down, Enter). `u` opens the list directly,
 -- Ctrl+u / Ctrl+Shift+u cycle. Switches at runtime, no restart.
 -- Shaders live in <config dir>/shaders (see fetch-shaders.sh). Hooks only run when they actually upscale (output larger than the video).
 local mp = require 'mp'
@@ -60,15 +60,32 @@ mp.add_key_binding(nil, "next", function() apply(cur % #presets + 1) end)
 mp.add_key_binding(nil, "prev", function() apply((cur - 2) % #presets + 1) end)
 mp.register_script_message("set", function(n) apply(tonumber(n)) end)  -- for tests: script-message-to upscale_menu set <n>
 
+-- Subtitles from a file: KDE file dialog, then sub-add (also works by dropping a .srt/.ass/.vtt onto the window)
+local function load_subs()
+    mp.command_native_async({name = "subprocess", capture_stdout = true, playback_only = false,
+        args = {"kdialog", "--title", "Load subtitles", "--getopenfilename", os.getenv("HOME"),
+                "*.srt *.ass *.ssa *.vtt *.sub *.sup|Subtitles"}},
+        function(ok, res)
+            local path = ok and res and res.status == 0 and (res.stdout or ""):gsub("%s+$", "") or ""
+            if path ~= "" then
+                mp.commandv("sub-add", path, "select")
+                mp.osd_message("Subtitles: " .. path:match("[^/]+$"), 3)
+            end
+        end)
+end
+
 -- Right-click menu: Upscaler (opens the list above) / Exit
 local function context()
     local ok, input = pcall(require, 'mp.input')
     if not (ok and input.select) then return open() end
     input.select({
         prompt = "Menu:",
-        items = {"Upscaler", "Exit"},
-        submit = function(n)
-            if n == 1 then mp.add_timeout(0.15, open) else mp.commandv("quit") end  -- delay: the menu closes itself after submit
+        items = {"Upscaler", "Load subtitles...", "Fullscreen", "Exit"},
+        submit = function(n)  -- delay: the menu closes itself after submit
+            if n == 1 then mp.add_timeout(0.15, open)
+            elseif n == 2 then mp.add_timeout(0.15, load_subs)
+            elseif n == 3 then mp.add_timeout(0.15, function() mp.commandv("cycle", "fullscreen") end)
+            else mp.commandv("quit") end
         end,
     })
 end
