@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Adds "Open in Claude" / "Open in VS Code" to Dolphin's right-click menu (idempotent).
+# Adds "Open Terminal Here" / "Open in Claude" / "Open in VS Code" to Dolphin's right-click menu (idempotent).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 DEST="$HOME/.local/share/kio/servicemenus"

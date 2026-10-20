@@ -25,10 +25,10 @@ Scope {
     property bool canForward: false
     readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.sh"
     readonly property int cardWidth: 440
-    readonly property int headerHeight: 68
+    readonly property int headerHeight: 40
     readonly property int overlap: 8       // card extends this far over the browser's rounded top corners
     readonly property int browserX: 5
-    readonly property int browserY: 114
+    readonly property int browserY: 86
 
     function go(text) { // search/open `text` (Enter or picking a suggestion); typing alone never searches
         const q = (text ?? query).trim();
@@ -263,8 +263,8 @@ Scope {
             RowLayout { // browser toolbar (only with results)
                 id: tools
                 visible: root.browserShown
-                anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 14 }
-                height: 40
+                anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: root.browserShown ? 12 : 14 }
+                height: 28
                 spacing: 2
                 Repeater {
                     model: [
@@ -275,7 +275,7 @@ Scope {
                     ]
                     delegate: RippleButton {
                         required property var modelData
-                        implicitWidth: 34; implicitHeight: 34
+                        implicitWidth: 26; implicitHeight: 26
                         buttonRadius: Appearance.rounding.full
                         colBackground: "transparent"
                         colBackgroundHover: Appearance.colors.colLayer2Hover
@@ -294,8 +294,8 @@ Scope {
 
             Rectangle { // search pill
                 id: pill
-                anchors { left: parent.left; right: root.browserShown ? tools.left : parent.right; top: parent.top; margins: 14; rightMargin: root.browserShown ? 6 : 14 }
-                height: 40
+                anchors { left: parent.left; right: root.browserShown ? tools.left : parent.right; top: parent.top; margins: root.browserShown ? 12 : 14; leftMargin: 14; rightMargin: root.browserShown ? 6 : 14 }
+                height: root.browserShown ? 28 : 40
                 radius: Appearance.rounding.full
                 color: Appearance.colors.colLayer2
                 MouseArea { // text cursor over the field; clicks fall through to the input and buttons

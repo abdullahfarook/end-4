@@ -4,7 +4,7 @@ local gs = { title = "^(gsearch)$" }
 hl.window_rule({ match = gs, float = true })
 hl.window_rule({ match = gs, workspace = "special:gsearch silent" })
 hl.window_rule({ match = gs, size = { 440, "(monitor_h-119)" } })
-hl.window_rule({ match = gs, move = { 5, 114 } })
+hl.window_rule({ match = gs, move = { 5, 86 } })
 hl.window_rule({ match = gs, no_initial_focus = true })
 hl.window_rule({ match = gs, animation = "slide left" })
 hl.window_rule({ match = gs, rounding = 8 })
