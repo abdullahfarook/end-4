@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "mpv Stream Sniffer",
   "version": "1.1",
-  "description": "Remembers the video streams (HLS/DASH/mp4) a tab loads; the toolbar button plays the best one in mpv (with the right referer), else the page address.",
+  "description": "Remembers the video streams (HLS/DASH/mp4) a tab loads; the toolbar button plays the one the page is using now in mpv (with the right referer; others under right-click > Sources), else the page address.",
   "browser_specific_settings": {
     "gecko": {
       "id": "mpv-sniffer@local"

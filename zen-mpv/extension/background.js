@@ -44,13 +44,13 @@ browser.webRequest.onHeadersReceived.addListener(d => {
 browser.tabs.onUpdated.addListener((id, info) => { if (info.status === "loading" && info.url) { streams.delete(id); browser.browserAction.setBadgeText({ tabId: id, text: "" }); } });
 browser.tabs.onRemoved.addListener(id => streams.delete(id));
 
-// Best candidate: a master playlist / manifest first (newest), then any playlist, then a plain file
+// Default = what the page is playing right now: the most recently requested stream (the player keeps re-fetching the quality it is using,
+// so after you pick a server/quality on the page that one is the newest). The others stay available in mpv's right-click menu > Sources.
 function best(list) {
-  const rank = s => (s.kind === "dash" ? 3 : s.kind === "hls" ? (/master|index|playlist/i.test(s.url) ? 3.5 : 2.5) : 1) * 1e13 + s.ts;
-  return [...list].sort((a, b) => rank(b) - rank(a))[0];
+  return [...list].sort((a, b) => b.ts - a.ts)[0];
 }
 
-function ranked(list) { const b = best(list); return b ? [b, ...list.filter(x => x !== b).sort((x, y) => y.ts - x.ts)] : []; }
+function ranked(list) { return [...list].sort((x, y) => y.ts - x.ts); }
 
 browser.browserAction.onClicked.addListener(async tab => {
   const list = ranked(streams.get(tab.id) || []);
