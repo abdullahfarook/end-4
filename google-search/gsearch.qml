@@ -84,14 +84,14 @@ Window {
                 + ";(document.head||document.documentElement).appendChild(s)})()"
         } ]
 
-        // Alt+click on a link opens it in the default browser (Alt state sampled from pointer events: the window never has keyboard focus)
-        TapHandler { acceptedButtons: Qt.AllButtons; gesturePolicy: TapHandler.WithinBounds; onPressedChanged: if (pressed) win.altDown = (point.modifiers & Qt.AltModifier) !== 0 }
+        // Ctrl/Alt+click on a link opens it in the default browser (Alt state sampled from pointer events: the window never has keyboard focus)
+        TapHandler { acceptedButtons: Qt.AllButtons; gesturePolicy: TapHandler.WithinBounds; onPressedChanged: if (pressed) win.altDown = (point.modifiers & (Qt.ControlModifier | Qt.AltModifier)) !== 0 }
         onNavigationRequested: (req) => {
             if (req.navigationType === WebEngineNavigationRequest.LinkClickedNavigation && win.altDown) {
                 req.action = WebEngineNavigationRequest.IgnoreRequest; win.external(req.url)
             }
         }
-        onNewWindowRequested: (req) => win.external(req.requestedUrl)  // target=_blank / window.open
+        onNewWindowRequested: (req) => { if (win.altDown) win.external(req.requestedUrl); else view.url = req.requestedUrl }  // target=_blank / window.open: same view unless Ctrl/Alt held
 
         onLoadingChanged: (r) => {
             if (!win.lastQ) return

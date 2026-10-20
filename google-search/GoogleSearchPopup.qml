@@ -186,11 +186,13 @@ Scope {
                         required property string modelData
                         required property int index
                         readonly property string typed: input.text.trim()
-                        readonly property int at: modelData.toLowerCase().indexOf(typed.toLowerCase())
+                        readonly property string shown: tm.elidedText
+                        readonly property int at: shown.toLowerCase().indexOf(typed.toLowerCase())
                         function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
                         // typed part regular, the rest bold (address-bar style: the completion stands out)
-                        readonly property string html: at < 0 ? esc(modelData)
-                            : esc(modelData.slice(0, at)) + "<span style='color:" + Appearance.colors.colSubtext + "'>" + esc(modelData.slice(at, at + typed.length)) + "</span><b>" + esc(modelData.slice(at + typed.length)) + "</b>"
+                        readonly property string html: at < 0 ? esc(shown)
+                            : esc(shown.slice(0, at)) + "<span style='color:" + Appearance.colors.colSubtext + "'>" + esc(shown.slice(at, at + typed.length)) + "</span><b>" + esc(shown.slice(at + typed.length)) + "</b>"
+                        TextMetrics { id: tm; font.pixelSize: Appearance.font.pixelSize.small; text: modelData; elide: Text.ElideRight; elideWidth: Math.max(0, label.width) }
                         Layout.fillWidth: true
                         implicitHeight: 30
                         buttonRadius: Appearance.rounding.small
@@ -200,7 +202,7 @@ Scope {
                         contentItem: RowLayout {
                             spacing: 8
                             MaterialSymbol { Layout.leftMargin: 4; text: /^(https?:\/\/|www\.)|^[\w-]+(\.[\w-]+)+(\/|$)/i.test(row.modelData) ? "language" : "history"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colSubtext }
-                            StyledText { Layout.fillWidth: true; textFormat: Text.RichText; text: row.html; elide: Text.ElideRight; font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer2 }
+                            StyledText { id: label; Layout.fillWidth: true; clip: true; textFormat: Text.RichText; text: row.html; elide: Text.ElideRight; font.pixelSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnLayer2 }
                             RippleButton { // forget this entry
                                 visible: row.hovered || root.sel === row.index
                                 implicitWidth: 22; implicitHeight: 22
@@ -257,7 +259,7 @@ Scope {
             StyledText {
                 visible: !root.browserShown
                 anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
-                text: "Enter search · Alt+click a link opens it in the browser · Esc close"
+                text: "Enter search · Ctrl+click a link opens it in the browser · Esc close"
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
             }
