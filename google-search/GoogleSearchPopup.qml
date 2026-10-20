@@ -25,7 +25,10 @@ Scope {
     property bool canBack: false
     property bool canForward: false
     readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.sh"
-    readonly property int cardWidth: 440
+    property int cardWidth: target.memWidth
+    readonly property int minWidth: 320
+    readonly property int maxWidth: Math.max(minWidth, (panel.screen?.width ?? 1200) - 100)
+    function applyWidth() { Quickshell.execDetached([scriptDir + "/gsearch-resize.sh", String(cardWidth)]) }
     readonly property int headerHeight: 40
     readonly property int overlap: 8       // card extends this far over the browser's rounded top corners
     readonly property int browserX: 5
@@ -92,6 +95,7 @@ Scope {
     Component.onDestruction: closeBrowser()
 
     Timer { interval: 400; running: true; onTriggered: root.openGrab = false }
+    Timer { id: resizeTick; interval: 50; onTriggered: root.applyWidth() }
     // The helper runs detached (it must outlive this popup until the slide-out is done); it reports status lines to a file
     readonly property string statusFile: (Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp") + "/gsearch-status"
     Process {
@@ -99,7 +103,7 @@ Scope {
         command: ["sh", "-c", 'touch "$1"; exec tail -n 0 -F "$1"', "_", root.statusFile]
         stdout: SplitParser {
             onRead: line => {
-                if (line === "shown") { root.browserShown = true; Quickshell.execDetached([root.scriptDir + "/gsearch-open.sh"]) } // open.sh is idempotent: re-shows the browser workspace if it got out of sync
+                if (line === "shown") { root.browserShown = true; if (root.cardWidth !== 440) root.applyWidth(); Quickshell.execDetached([root.scriptDir + "/gsearch-open.sh"]) } // open.sh is idempotent: re-shows the browser workspace if it got out of sync
                 else if (line.startsWith("nav ")) { const p = line.split(" "); root.canBack = p[1] === "1"; root.canForward = p[2] === "1" }
                 else if (line.startsWith("url ")) root.target.memUrl = line.slice(4)
                 else if (line === "loading") { root.loading = true; root.progress = 0 }
@@ -150,6 +154,7 @@ Scope {
         mask: Region {
             item: card
             Region { item: dropdown }
+            Region { item: grip }
         }
         exclusionMode: ExclusionMode.Normal
         exclusiveZone: 0
@@ -162,6 +167,38 @@ Scope {
         Component.onCompleted: input.forceActiveFocus()
 
         StyledRectangularShadow { target: card }
+
+        Item { // drag handle on the right edge: resizes the widget (card + browser window)
+            id: grip
+            x: card.x + card.width - 2
+            y: card.y
+            width: 10
+            height: panel.height - card.y - Appearance.sizes.hyprlandGapsOut // full height: the card shrinks to the header once the browser is shown
+            z: 20
+            property real startX: 0
+            property int startW: 440
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.SizeHorCursor
+                onPressed: mouse => { grip.startX = mapToItem(null, mouse.x, 0).x; grip.startW = root.cardWidth }
+                onPositionChanged: mouse => {
+                    if (!pressed) return;
+                    const dx = mapToItem(null, mouse.x, 0).x - grip.startX;
+                    root.target.memWidth = Math.round(Math.max(root.minWidth, Math.min(root.maxWidth, grip.startW + dx)));
+                    if (!resizeTick.running) resizeTick.start();
+                }
+                onReleased: root.applyWidth()
+                onDoubleClicked: { root.target.memWidth = 440; root.applyWidth() }
+                Rectangle { // subtle grab indicator on hover
+                    anchors.centerIn: parent
+                    width: 3; height: 48; radius: 2
+                    color: Appearance.colors.colOutline
+                    opacity: parent.containsMouse || parent.pressed ? 0.8 : 0
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+            }
+        }
 
         Rectangle { // suggestions from recent searches (over the empty state or the browser), like a browser address-bar list
             id: dropdown

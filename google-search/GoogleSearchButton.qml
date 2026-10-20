@@ -16,6 +16,7 @@ RippleButton {
     // Last session (kept in memory only, lost when the shell restarts): restored when the popup opens again
     property string memQuery: ""
     property string memUrl: ""
+    property int memWidth: 440 // widget width chosen by dragging its right edge (memory only)
     // Suggestion history (recent searches / addresses, newest first): saved to disk so it survives shell restarts.
     // Every bar has its own button, so the popup reloads the file when it opens and saves after each change.
     property var history: []
