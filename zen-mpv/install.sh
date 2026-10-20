@@ -21,6 +21,9 @@ JSON
 # mpv Stream Sniffer extension: packaged only, NOT installed into the profile (it is unsigned; loading it is up to you: about:debugging ->
 # This Firefox -> Load Temporary Add-on -> extension/manifest.json, or sign it with Mozilla and install the signed file)
 ( cd "$REPO/extension" && rm -f "$HOME/.config/mpv-upscale/mpv-sniffer.xpi" && bsdtar --format zip -cf "$HOME/.config/mpv-upscale/mpv-sniffer.xpi" . )
+# Signed build of the extension into the Zen profile (Zen picks up the new version at its next start)
+SIGNED="$REPO/mpv-sniffer-1.1-signed.xpi"; PROFILE="$ZEN/c0u92kn2.Default (release)"
+[ -f "$SIGNED" ] && [ -d "$PROFILE/extensions" ] && install -m644 "$SIGNED" "$PROFILE/extensions/mpv-sniffer@local.xpi" || true
 python3 - "$KEYBINDS" "$REPO/zen-mpv-rules.lua" <<'PY'
 import re, sys
 kb, rules = sys.argv[1:3]
