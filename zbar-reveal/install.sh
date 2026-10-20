@@ -45,4 +45,5 @@ PY
 python3 "$(dirname "$0")/reorder.py" "$BAR"
 python3 "$(dirname "$0")/patch-right.py" "$BAR" "$Q/ClockWidget.qml"
 python3 "$(dirname "$0")/patch-util.py" "$Q/UtilButtons.qml"
+python3 "$(dirname "$0")/patch-pins.py" "$BAR"
 echo "Done. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"

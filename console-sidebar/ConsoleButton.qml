@@ -18,7 +18,16 @@ RippleButton {
     colRipple: Appearance.colors.colLayer1Active
 
     onPressed: Quickshell.execDetached(["bash", "-c", "$HOME/.config/hypr/custom/console-sidebar.sh"])
-    altAction: () => { stopMenu.visible = !stopMenu.visible; }
+    altAction: () => { stopMenu.visible = !stopMenu.visible; if (stopMenu.visible) root.placeMenu(stopMenu); }
+
+    // The bar slot animates, so the anchor is computed from the button's position at the moment the menu opens
+    function placeMenu(m) {
+        const pt = root.mapToItem(null, 0, 0);
+        m.anchor.rect.x = pt.x + root.width / 2; // gravity Bottom centers the popup on this point
+        m.anchor.rect.y = pt.y + root.height;
+        m.anchor.updateAnchor();
+    }
+    readonly property bool menuOpen: stopMenu.visible // keeps the bar slot revealed while the menu is open
 
     // Right-click menu: stop the console terminal
     PopupWindow {
@@ -28,11 +37,8 @@ RippleButton {
         implicitHeight: 44 + 2 * Appearance.sizes.elevationMargin
         anchor {
             window: root.QsWindow.window
-            item: root
             edges: Edges.Bottom
             gravity: Edges.Bottom
-            rect.x: (root.width - stopMenu.implicitWidth) / 2
-            rect.y: root.height
         }
         HyprlandFocusGrab {
             active: stopMenu.visible

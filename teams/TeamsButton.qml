@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
@@ -39,9 +40,73 @@ RippleButton {
     Process { id: toggler; command: ["bash", "-c", "$HOME/.config/hypr/custom/teams-panel.sh"] }
     onClicked: { if (!toggler.running) toggler.running = true; }
     altAction: () => {
-        if (!root.trayItem || !root.trayItem.hasMenu) return;
+        if (!root.trayItem || !root.trayItem.hasMenu) { fallback.visible = !fallback.visible; if (fallback.visible) root.placeMenu(fallback); return; } // no tray entry: own menu
         if (menu.active && menu.item && typeof menu.item.close === "function") menu.item.close();
         else menu.active = true;
+    }
+
+    // The bar slot animates, so the anchor is computed from the button's position at the moment the menu opens
+    function placeMenu(m) {
+        const pt = root.mapToItem(null, 0, 0);
+        m.anchor.rect.x = pt.x + root.width / 2; // gravity Bottom centers the popup on this point
+        m.anchor.rect.y = pt.y + root.height;
+        m.anchor.updateAnchor();
+    }
+    readonly property bool menuOpen: menuWindow !== null || fallback.visible // keeps the bar slot revealed while a menu is open
+
+    // Fallback right-click menu, used while Teams has no tray entry (it is hidden or still starting)
+    PopupWindow {
+        id: fallback
+        color: "transparent"
+        implicitWidth: 150 + 2 * Appearance.sizes.elevationMargin
+        implicitHeight: 84 + 2 * Appearance.sizes.elevationMargin
+        anchor {
+            window: root.QsWindow.window
+            edges: Edges.Bottom
+            gravity: Edges.Bottom
+        }
+        HyprlandFocusGrab {
+            active: fallback.visible
+            windows: [fallback]
+            onCleared: fallback.visible = false
+        }
+        StyledRectangularShadow { target: fallbackBg }
+        Rectangle {
+            id: fallbackBg
+            anchors.fill: parent
+            anchors.margins: Appearance.sizes.elevationMargin
+            color: Appearance.colors.colLayer0
+            radius: Appearance.rounding.windowRounding
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            Column {
+                anchors.fill: parent
+                anchors.margins: 4
+                Repeater {
+                    model: [
+                        { label: "Open Teams", icon: "forum", cmd: "$HOME/.config/hypr/custom/teams-panel.sh" },
+                        { label: "Quit Teams", icon: "power_settings_new", cmd: "pkill -f /opt/teams-for-linux/teams-for-linux" }
+                    ]
+                    RippleButton {
+                        required property var modelData
+                        width: parent.width
+                        height: parent.height / 2
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: "transparent"
+                        onClicked: {
+                            fallback.visible = false;
+                            Quickshell.execDetached(["bash", "-c", modelData.cmd]);
+                        }
+                        contentItem: RowLayout {
+                            spacing: 6
+                            MaterialSymbol { text: parent.parent.modelData.icon; iconSize: 18; color: Appearance.colors.colOnLayer0 }
+                            StyledText { text: parent.parent.modelData.label; color: Appearance.colors.colOnLayer0 }
+                            Item { Layout.fillWidth: true }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Like the tray row: while the menu is open a focus grab covers the bar and the menu, and a click anywhere else closes it.
