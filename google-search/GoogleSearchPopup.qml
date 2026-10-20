@@ -15,6 +15,7 @@ Scope {
     id: root
     required property Item target
     property bool visible: true
+    property string screenName: Hyprland.focusedMonitor?.name ?? "" // pinned at open: moving the cursor to another monitor must not move the widget
     property string query: ""
     property bool browserShown: false
     property bool restoring: false
@@ -66,6 +67,7 @@ Scope {
     readonly property string scriptDir: Quickshell.env("HOME") + "/.config/hypr/custom"
     property bool closed: false
     Component.onCompleted: {
+        screenName = Hyprland.focusedMonitor?.name ?? screenName; // freeze the binding above
         Quickshell.execDetached([scriptDir + "/gsearch-open.sh"]);
         target.loadHistory(); // pick up changes saved by another bar's button
         const url = root.target.memUrl ?? "";
@@ -110,7 +112,7 @@ Scope {
 
     // Click-away layer on every screen; on the popup's screen the browser area is left uncovered
     Variants {
-        model: Quickshell.screens
+        model: Quickshell.screens.filter(s => s.name === root.screenName) // click-away only on the popup's own monitor
         PanelWindow {
             id: away
             required property var modelData
@@ -140,7 +142,7 @@ Scope {
 
     PanelWindow {
         id: panel
-        screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? null // same monitor the special workspace opens on
+        screen: Quickshell.screens.find(s => s.name === root.screenName) ?? null // monitor it was opened on (the special workspace opens there too)
         color: "transparent"
         anchors { top: true; left: true }
         implicitWidth: root.cardWidth + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
