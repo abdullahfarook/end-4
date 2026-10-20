@@ -14,13 +14,13 @@ url = msg["url"]
 stream = bool(msg.get("stream"))          # from the mpv Stream Sniffer extension: a detected HLS/DASH/file address, not a page
 referer, origin = msg.get("referer") or "", msg.get("origin") or ""
 sources_arg = []
-if msg.get("sources"):                    # all detected streams: mpv's right-click menu > Sources lets you switch between them
+if msg.get("sources") or msg.get("subs"):                    # all detected streams: mpv's right-click menu > Sources lets you switch between them
     sdir = os.path.expanduser("~/.cache/zen-mpv"); os.makedirs(sdir, exist_ok=True)
     for old in sorted(os.listdir(sdir))[:-20]:   # keep only the newest files
         try: os.remove(os.path.join(sdir, old))
         except OSError: pass
     spath = os.path.join(sdir, "sources-%d.json" % os.getpid())
-    json.dump({"current": url, "sources": msg["sources"]}, open(spath, "w"))
+    json.dump({"current": url, "sources": msg.get("sources") or [], "subs": msg.get("subs") or []}, open(spath, "w"))
     sources_arg = ["--script-opts-append=zenmpv-sources=" + spath]
 if not url.startswith(("http://", "https://", "file://")):
     sys.exit(1)

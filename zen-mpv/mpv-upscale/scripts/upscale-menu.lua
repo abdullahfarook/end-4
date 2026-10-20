@@ -83,16 +83,44 @@ local function load_subs()
 end
 
 -- Sources: the streams the browser extension detected (best one already playing); pick another to switch, keeping the position
-local sources, current_src = {}, nil
+local sources, current_src, page_subs = {}, nil, {}
 do
     local path = mp.get_opt("zenmpv-sources")
     if path and path ~= "" then
         local f = io.open(path, "r")
         if f then
             local d = require('mp.utils').parse_json(f:read("*a")); f:close()
-            if d and d.sources then sources, current_src = d.sources, d.current end
+            if d then sources, current_src, page_subs = d.sources or {}, d.current, d.subs or {} end
         end
     end
+end
+
+-- Subtitle files the browser loaded: add them all when the file starts (first one selected), with the referer they need
+local subs_added = false
+local function add_page_subs()
+    if subs_added or #page_subs == 0 then return end
+    subs_added = true
+    for i, sub in ipairs(page_subs) do
+        local lang = (sub.url:match("[/_%.%-](%a%a%a?)[/_%.%-]") or ""):lower()
+        mp.commandv("sub-add", sub.url, i == #page_subs and "select" or "auto", "page " .. i, lang)
+    end
+    mp.osd_message("Subtitles: " .. #page_subs .. " loaded from the page", 3)
+end
+mp.register_event("file-loaded", function() mp.add_timeout(0.5, add_page_subs) end)
+
+local function pick_subtitle()
+    local ok, input = pcall(require, 'mp.input')
+    if not (ok and input.select) then return end
+    local items, ids, cur = {"Off"}, {0}, mp.get_property_number("sid") or 0
+    for _, t in ipairs(mp.get_property_native("track-list") or {}) do
+        if t.type == "sub" then
+            items[#items + 1] = string.format("%s %s%s", t.id == cur and "●" or "  ", t.title or ("track " .. t.id), t.lang and (" [" .. t.lang .. "]") or "")
+            ids[#ids + 1] = t.id
+        end
+    end
+    input.select({prompt = "Subtitles:", items = items, submit = function(n)
+        mp.set_property("sid", ids[n] == 0 and "no" or tostring(ids[n]))
+    end})
 end
 
 local function source_label(i, src)
@@ -169,7 +197,7 @@ local function context()
     if #sources > 0 then menu_items[#menu_items + 1] = "Sources (" .. #sources .. ")..."; menu_actions[#menu_actions + 1] = "sources" end
     menu_items[#menu_items + 1] = "Smoother motion: " .. (smooth_on() and "ON" or "off"); menu_actions[#menu_actions + 1] = "smooth"
     menu_items[#menu_items + 1] = "Clean up compression damage: " .. (deband_on() and "ON" or "off"); menu_actions[#menu_actions + 1] = "deband"
-    for _, e in ipairs({{"Load subtitles...", "subs"}, {"Fullscreen", "fullscreen"}, {"Exit", "exit"}}) do
+    for _, e in ipairs({{"Subtitle track...", "subtrack"}, {"Load subtitles...", "subs"}, {"Fullscreen", "fullscreen"}, {"Exit", "exit"}}) do
         menu_items[#menu_items + 1] = e[1]; menu_actions[#menu_actions + 1] = e[2]
     end
     input.select({
@@ -181,6 +209,7 @@ local function context()
             elseif what == "sources" then mp.add_timeout(0.15, pick_source)
             elseif what == "smooth" then mp.add_timeout(0.15, toggle_smooth)
             elseif what == "deband" then mp.add_timeout(0.15, toggle_deband)
+            elseif what == "subtrack" then mp.add_timeout(0.15, pick_subtitle)
             elseif what == "subs" then mp.add_timeout(0.15, load_subs)
             elseif what == "fullscreen" then mp.add_timeout(0.15, function() mp.commandv("cycle", "fullscreen") end)
             else mp.commandv("quit") end
