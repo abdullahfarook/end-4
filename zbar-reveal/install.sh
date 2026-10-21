@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Left bar: only the AI button is always visible; the other buttons slide out of it inside the bar when the pointer is on the left side of the bar (icons or title).
 # Right side: the clock date and util buttons reveal with the same Revealer animation (patch-right.py).
-# Buttons with an unread count (Mail, Teams) stay visible until the count is 0. Run AFTER the other bar installers (patches BarContent.qml; idempotent).
+# Buttons with an unread count (Mail, Teams) stay visible until the count is 0; Docker likewise while containers are running. Run AFTER the other bar installers (patches BarContent.qml; idempotent).
 set -euo pipefail
 Q="$HOME/.config/quickshell/ii/modules/ii/bar"; BAR="$Q/BarContent.qml"
 B="$HOME/backups/zbar-reveal/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$BAR" "$Q/ClockWidget.qml" "$Q/UtilButtons.qml" "$B/"
@@ -11,7 +11,7 @@ import re, sys
 p = sys.argv[1]; s = open(p).read()
 if "RevealSlot" in s: sys.exit(0)
 pins = {"MailButton": ("mailBtn", "mailBtn.newTotal > 0 || mailBtn.popupOpen"), "TeamsButton": ("teamsBtn", "teamsBtn.unread > 0"),
-        "FileSearchButton": ("fileBtn", "fileBtn.open"), "DockerButton": ("dockerBtn", "dockerBtn.open"),
+        "FileSearchButton": ("fileBtn", "fileBtn.open"), "DockerButton": ("dockerBtn", "dockerBtn.open || (dockerBtn.available && dockerBtn.running > 0)"),
         "TaskManagerButton": ("taskBtn", "taskBtn.open"), "GoogleSearchButton": ("googleBtn", "googleBtn.open")}
 names = ["VscodeGitButton", "ConsoleButton", "MailButton", "TeamsButton", "FileSearchButton", "DockerButton", "TaskManagerButton", "GoogleSearchButton"]
 def block(n):
@@ -47,3 +47,5 @@ python3 "$(dirname "$0")/patch-right.py" "$BAR" "$Q/ClockWidget.qml"
 python3 "$(dirname "$0")/patch-util.py" "$Q/UtilButtons.qml"
 python3 "$(dirname "$0")/patch-pins.py" "$BAR"
 echo "Done. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
+# Docker stays visible while containers are running (hidden at 0), like Mail/Teams; also upgrades an already-patched BarContent.qml.
+sed -i 's/pinned: dockerBtn\.open$/pinned: dockerBtn.open || (dockerBtn.available \&\& dockerBtn.running > 0)/' "$BAR"
