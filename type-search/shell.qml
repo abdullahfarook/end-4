@@ -22,7 +22,7 @@ ShellRoot {
     // only arm when the new workspace has no windows (give Hyprland state a moment to update)
     Timer {
         id: checkTimer
-        interval: 25
+        interval: 10
         onTriggered: {
             Hyprland.refreshToplevels();
             const ws = Hyprland.focusedWorkspace;
@@ -35,23 +35,26 @@ ShellRoot {
 
     Timer { id: timer; interval: root.timeoutMs; onTriggered: if (root.buffer === "") root.armed = false }
 
-    // collect fast typing for a moment so no leading characters are lost
+    // open on the first key at once; keys typed while it spins up are re-sent as one string
     property string buffer: ""
-    Timer {
-        id: sendTimer
-        interval: 90
-        onTriggered: {
-            sender.text = root.buffer;
-            root.buffer = "";
-            root.disarm();
-            sender.running = true;
-        }
+    property string sentText: ""
+    function flush() {
+        if (sender.running || buffer === "" || buffer === sentText) return;
+        sentText = buffer;
+        sender.text = buffer;
+        sender.running = true;
+    }
+
+    function finish() {
+        if (buffer !== sentText) { flush(); return; }
+        buffer = ""; sentText = ""; disarm();
     }
 
     Process {
         id: sender
         property string text: ""
-        command: ["bash", "-c", "sleep 0.05; exec qs -c ii ipc call search openWith \"$1\"", "_", text]
+        onRunningChanged: if (!running) root.finish()
+        command: ["bash", "-c", "exec qs -c ii ipc call search openWith \"$1\"", "_", text]
     }
 
     // a click anywhere else clears the grab, so clicking works normally right after a switch
@@ -81,10 +84,10 @@ ShellRoot {
                 if (t.length > 0 && t >= " " && t !== "\x7f"
                         && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
                     root.buffer += t;
-                    sendTimer.restart();
+                    root.flush();
                 } else if (event.key === Qt.Key_Backspace && root.buffer.length > 0) {
                     root.buffer = root.buffer.slice(0, -1);
-                    sendTimer.restart();
+                    root.flush();
                 } else {
                     root.disarm();
                 }
