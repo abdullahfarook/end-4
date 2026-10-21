@@ -29,7 +29,7 @@ ShellRoot {
                 let empty = false;
                 try {
                     const ws = JSON.parse(text).find(w => String(w.id) === root.wsId);
-                    empty = !!ws && ws.windows === 0;
+                    empty = !ws || ws.windows === 0;  // a workspace not listed yet is a fresh, empty one
                 } catch (e) {}
                 if (empty) root.arm(); else root.disarm();
             }
