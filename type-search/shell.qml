@@ -15,6 +15,7 @@ ShellRoot {
     Connections {
         target: Hyprland
         function onRawEvent(ev) {
+            if (ev.name === "openlayer" && root.armed && ev.data.indexOf("typesearch") < 0) { console.log("typesearch: disarm, layer opened", ev.data); root.disarm(); }   // popup/launcher opened: step aside
             if (ev.name === "workspacev2") { root.wsId = ev.data.split(",")[0]; wsQuery.running = true; }
         }
     }
@@ -31,12 +32,21 @@ ShellRoot {
                     const ws = JSON.parse(text).find(w => String(w.id) === root.wsId);
                     empty = !ws || ws.windows === 0;  // a workspace not listed yet is a fresh, empty one
                 } catch (e) {}
+                console.log("typesearch: ws", root.wsId, "empty =", empty);
                 if (empty) root.arm(); else root.disarm();
             }
         }
     }
 
-    function arm() { armed = true; timer.restart(); }
+    // A left click ends the capture at once (Hyprland's non-consuming mouse:272 bind -> this shortcut):
+    // holding the keyboard through a click would make shell popups close instantly. Pointer movement is fine.
+    GlobalShortcut {
+        appid: "typesearch"
+        name: "click"
+        onPressed: if (root.armed) { console.log("typesearch: disarm, click"); root.disarm(); }
+    }
+
+    function arm() { console.log("typesearch: arm"); armed = true; timer.restart(); }
     function disarm() { armed = false; timer.stop(); }
 
     Timer { id: timer; interval: root.timeoutMs; onTriggered: if (root.buffer === "") root.armed = false }
@@ -47,11 +57,13 @@ ShellRoot {
     function flush() {
         if (sender.running || buffer === "" || buffer === sentText) return;
         sentText = buffer;
+        console.log("typesearch: send", JSON.stringify(buffer));
         sender.text = buffer;
         sender.running = true;
     }
 
     function finish() {
+        console.log("typesearch: sender done, buffer", JSON.stringify(buffer), "sent", JSON.stringify(sentText));
         if (buffer !== sentText) { flush(); return; }
         buffer = ""; sentText = ""; disarm();
     }
@@ -69,41 +81,30 @@ ShellRoot {
         color: "transparent"
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
+        // an empty Region {} still takes input, so leave only a 1px corner as the input area; clicks elsewhere pass through
+        mask: Region { x: 0; y: 0; width: 1; height: 1 }
         WlrLayershell.namespace: "quickshell:typesearch"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: root.armed ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-
-        // Pointer movement ends the grab before a click can land on this overlay,
-        // so clicks reach windows normally.
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            property real sx: -1
-            property real sy: -1
-            onPositionChanged: mouse => {
-                if (sx < 0) { sx = mouse.x; sy = mouse.y; return; }
-                if (Math.abs(mouse.x - sx) + Math.abs(mouse.y - sy) > 3) root.disarm();
-            }
-            onPressed: root.disarm()
-            onVisibleChanged: sx = -1
-        }
 
         Item {
             anchors.fill: parent
             focus: true
             Keys.onPressed: event => {
+                console.log("typesearch: key", event.key, JSON.stringify(event.text));
                 if (event.key === Qt.Key_Escape) { root.disarm(); return; }
                 const t = event.text;
                 if (t.length > 0 && t >= " " && t !== "\x7f"
-                        && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+                        && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                     root.buffer += t;
                     root.flush();
                 } else if (event.key === Qt.Key_Backspace && root.buffer.length > 0) {
                     root.buffer = root.buffer.slice(0, -1);
                     root.flush();
-                } else {
-                    root.disarm();
+                } else if (t.length > 0 || event.key === Qt.Key_Return || event.key === Qt.Key_Tab) {
+                    root.disarm();   // a shortcut or other real key: leave typing alone
                 }
+                // bare modifier presses (Super is usually still down after a switch) are ignored
             }
         }
     }
