@@ -15,18 +15,24 @@ ShellRoot {
     Connections {
         target: Hyprland
         function onRawEvent(ev) {
-            if (ev.name === "workspacev2") checkTimer.restart();
+            if (ev.name === "workspacev2") { root.wsId = ev.data.split(",")[0]; wsQuery.running = true; }
         }
     }
 
-    // only arm when the new workspace has no windows (give Hyprland state a moment to update)
-    Timer {
-        id: checkTimer
-        interval: 10
-        onTriggered: {
-            Hyprland.refreshToplevels();
-            const ws = Hyprland.focusedWorkspace;
-            if (ws && ws.toplevels.values.length === 0) root.arm(); else root.disarm();
+    // only arm when the new workspace has no windows (asked from hyprctl: Quickshell's own state lags a switch)
+    property string wsId: ""
+    Process {
+        id: wsQuery
+        command: ["hyprctl", "workspaces", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let empty = false;
+                try {
+                    const ws = JSON.parse(text).find(w => String(w.id) === root.wsId);
+                    empty = !!ws && ws.windows === 0;
+                } catch (e) {}
+                if (empty) root.arm(); else root.disarm();
+            }
         }
     }
 
@@ -57,23 +63,30 @@ ShellRoot {
         command: ["bash", "-c", "exec qs -c ii ipc call search openWith \"$1\"", "_", text]
     }
 
-    // a click anywhere else clears the grab, so clicking works normally right after a switch
-    HyprlandFocusGrab {
-        windows: [grabWin]
-        active: root.armed
-        onCleared: root.disarm()
-    }
-
     PanelWindow {
         id: grabWin
         visible: root.armed
         color: "transparent"
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
-        mask: Region {}   // empty: pointer input passes through
         WlrLayershell.namespace: "quickshell:typesearch"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: root.armed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.armed ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+        // Pointer movement ends the grab before a click can land on this overlay,
+        // so clicks reach windows normally.
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            property real sx: -1
+            property real sy: -1
+            onPositionChanged: mouse => {
+                if (sx < 0) { sx = mouse.x; sy = mouse.y; return; }
+                if (Math.abs(mouse.x - sx) + Math.abs(mouse.y - sy) > 3) root.disarm();
+            }
+            onPressed: root.disarm()
+            onVisibleChanged: sx = -1
+        }
 
         Item {
             anchors.fill: parent
