@@ -30,14 +30,30 @@ LazyLoader {
       // also only closes it rather than closing and reopening).
       // Both windows stay mapped once created (hidden = empty input region, nothing drawn): unmapping a layer made Hyprland
       // refocus the last window, which flashed the AI panel open
+      property real openedAt: 0
+      Connections { target: root; function onOpenChanged() { if (root.open) openedAt = Date.now() } }
+      // Clicks on the bar pass through the click-away layer (it covers everything below the bar), so one click on another bar
+      // button both reaches that button and closes this popup: close when something else opens (a popup or the sidebar
+      // layer, the AI panel's special workspace, another workspace).
+      Connections {
+          target: Hyprland
+          enabled: root.open
+          function onRawEvent(event) {
+              if (Date.now() - openedAt < 600) return;   // our own layers opening
+              if (["activespecial", "workspacev2"].includes(event.name)
+                  || (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss")) root.closeRequested()
+          }
+      }
+
       PanelWindow {
-        mask: Region { item: root.open ? dismissArea : null }
+        mask: Region { item: root.open ? belowBar : null }
         color: "transparent"
         anchors { left: true; right: true; top: true; bottom: true }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:popup-dismiss"
         WlrLayershell.layer: WlrLayer.Top
+        Item { id: belowBar; x: 0; y: Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight; width: parent.width; height: parent.height - Appearance.sizes.barHeight }
         MouseArea { id: dismissArea; anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.closeRequested() }
       }
       PanelWindow {

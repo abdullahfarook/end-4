@@ -120,6 +120,20 @@ Scope {
         }
     }
 
+    property real openedAt: Date.now()
+    // Clicks on the bar pass through the click-away layer (it covers everything below the bar), so one click on another bar
+    // button both reaches that button and closes this popup: close when something else opens (a popup or the sidebar
+    // layer, the AI panel's special workspace, another workspace).
+    Connections {
+        target: Hyprland
+        enabled: true
+        function onRawEvent(event) {
+            if (Date.now() - root.openedAt < 600) return;   // our own layers opening
+            if (["activespecial", "workspacev2"].includes(event.name)
+                || (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss")) root.visible = false
+        }
+    }
+
     // Click-away layer on every screen; on the popup's screen the browser area is left uncovered
     Variants {
         model: Quickshell.screens.filter(s => s.name === root.screenName) // click-away only on the popup's own monitor
@@ -143,9 +157,10 @@ Scope {
                 Region { item: leftBand }
                 Region { item: rightBand }
             }
-            Item { id: topBand; x: 0; y: 0; width: away.width; height: away.cut ? root.browserY : away.height }
-            Item { id: leftBand; x: 0; y: 0; width: away.cut ? away.bx : 0; height: away.height }
-            Item { id: rightBand; x: away.bx2; y: 0; width: away.cut ? away.width - away.bx2 : 0; height: away.height }
+            readonly property real barH: Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight   // the bar stays clickable
+            Item { id: topBand; x: 0; y: away.barH; width: away.width; height: (away.cut ? root.browserY : away.height) - away.barH }
+            Item { id: leftBand; x: 0; y: away.barH; width: away.cut ? away.bx : 0; height: away.height - away.barH }
+            Item { id: rightBand; x: away.bx2; y: away.barH; width: away.cut ? away.width - away.bx2 : 0; height: away.height - away.barH }
             MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.visible = false }
         }
     }

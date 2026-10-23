@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 
 // Docker popup: container list with state, image, CPU/memory and ports; click a container for live logs
 // (follow/pause, copy, start/stop/restart). Polls only while visible.
@@ -143,16 +144,30 @@ Scope {
         StyledToolTip { text: ib.tip; visible: ib.hovered && ib.tip !== "" }
     }
 
+    property real openedAt: Date.now()
+    // Clicks on the bar pass through the click-away layer (it covers everything below the bar), so one click on another bar
+    // button both reaches that button and closes this popup: close when something else opens (a popup or the sidebar
+    // layer, the AI panel's special workspace, another workspace).
+    Connections {
+        target: Hyprland
+        enabled: true
+        function onRawEvent(event) {
+            if (Date.now() - root.openedAt < 600) return;   // our own layers opening
+            if (["activespecial", "workspacev2"].includes(event.name)
+                || (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss")) root.visible = false
+        }
+    }
     // Same geometry as the left sidebar: top/left/bottom anchored below the bar, hyprland outer gap around the card.
     // A click-away layer closes it (a click anywhere, including the bar button).
     PanelWindow {
-        mask: Region { item: root.visible ? dismissArea : null }
+        mask: Region { item: root.visible ? belowBar : null }
         color: "transparent"
         anchors { left: true; right: true; top: true; bottom: true }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:popup-dismiss"
         WlrLayershell.layer: WlrLayer.Top
+        Item { id: belowBar; x: 0; y: Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight; width: parent.width; height: parent.height - Appearance.sizes.barHeight }
         MouseArea { id: dismissArea; anchors.fill: parent; acceptedButtons: Qt.AllButtons; onPressed: root.visible = false }
     }
     PanelWindow {

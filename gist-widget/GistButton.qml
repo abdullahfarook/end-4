@@ -15,7 +15,7 @@ RippleButton {
     property real buttonPadding: 5
     property bool open: false
     property bool menuOpen: menu.visible
-    readonly property bool pinned: open || menuOpen || draftCount > 0 || changed   // keeps the icon shown in the sliding bar row (zbar-reveal)
+    readonly property bool pinned: open || menuOpen   // keeps the icon shown in the sliding bar row (zbar-reveal) while in use
     property var gists: []                 // index.json: [{id, description, public, html_url, created_at, updated_at, files: [{filename, language, size, content, truncated, clipped}]}]
     property bool syncing: syncProc.running
     property string lastSync: ""           // ISO time of the last successful sync
