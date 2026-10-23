@@ -8,6 +8,13 @@ import re, sys
 p = sys.argv[1]; t = open(p).read()
 t = re.sub(r"( *)// (?:swapUsed is in KiB|show swap only).*\n( *)shown: ResourceUsage\.swapUsed(?:Percentage >= 0\.5.*| >= 100 \* 1024)",
            r"\1// show swap only when at least 50% full, or while the widget is hovered\n\2shown: ResourceUsage.swapUsedPercentage >= 0.5 || root.containsMouse", t)
+t = t.replace("swapUsedPercentage >= 0.5 || root.containsMouse", "swapUsedPercentage >= 0.5 || root.hot")
+if "property bool hot" not in t:
+    t = t.replace("    hoverEnabled: !Config.options.bar.tooltips.clickToShow\n", """    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    property bool hot: false
+    onContainsMouseChanged: { if (containsMouse) { closeTimer.stop(); hot = true } else closeTimer.restart() }
+    Timer { id: closeTimer; interval: 700; onTriggered: root.hot = false }
+""", 1)
 open(p, "w").write(t)
 PY
-grep -n "swapUsedPercentage >= 0.5 || root.containsMouse" "$F" >/dev/null && echo "Applied. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
+grep -n "swapUsedPercentage >= 0.5 || root.hot" "$F" >/dev/null && echo "Applied. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
