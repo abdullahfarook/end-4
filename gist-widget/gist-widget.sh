@@ -2,8 +2,8 @@
 # Backend for the Gist bar widget (GistButton/GistPopup): your GitHub gists through `gh api`, mirrored in a local cache
 # so the popup opens instantly, works offline and can filter by file content.
 #   sync                 list gists, re-fetch only the ones whose updated_at changed, drop deleted ones; prints the sync time
-#   create  < payload    POST /gists     (payload: {description, public, files: {name: {content}}}); prints "ID URL"
-#   update ID < payload  PATCH /gists/ID (payload: {description, files: {name: {content} | {filename, content} | null}}); prints "ID URL"
+#   create  < payload    POST /gists     (payload: {description, public, files: {name: {content}}}); prints "ID URL UPDATED_AT"
+#   update ID < payload  PATCH /gists/ID (payload: {description, files: {name: {content} | {filename, content} | null}}); prints "ID URL UPDATED_AT"
 #   delete ID            DELETE /gists/ID
 #   clip                 secret gist from the clipboard; copies its URL and notifies
 # The cache is $XDG_CACHE_HOME/gist-widget/{g/<id>.json, index.json}; index.json (newest first, file contents clipped
@@ -29,7 +29,7 @@ index() {
 }
 # Store one API response (a full gist object) in the cache; sets $id.
 store() { id=$(jq -r .id <<<"$1"); printf '%s\n' "$1" > "$CACHE/g/$id.json.part" && mv "$CACHE/g/$id.json.part" "$CACHE/g/$id.json"; }
-created() { jq -r '"\(.id) \(.html_url)"' "$CACHE/g/$id.json"; }
+created() { jq -r '"\(.id) \(.html_url) \(.updated_at)"' "$CACHE/g/$id.json"; }
 
 case "${1:-}" in
   sync)

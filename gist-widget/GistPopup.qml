@@ -7,23 +7,28 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
-// Gist popup: list of your gists (filter by description, file name, language or content; All/Public/Secret; sort),
-// click one to view its files (copy, open on GitHub, edit, delete), or create a new one. Data and the gh calls live
-// in GistButton (store); this popup is instantiated only while open.
+// Gist popup: list of your gists (filter by description, file name, language or content; All/Public/Secret/Drafts; sort),
+// click one to view its files (copy, open on GitHub, edit, delete), or create a new one. Creating and editing happen in
+// drafts (GistButton keeps them, also on disk): going back keeps the draft, the list marks it, Save (top right, Ctrl+S)
+// publishes it and keeps the editor open. Data and gh calls live in GistButton (store); this popup exists only while open.
 Scope {
     id: root
     required property Item target
     required property var store
+    property var screen: null              // the bar's screen: the popup opens next to the button that was clicked
     property bool visible: true
-    property string mode: "list"           // list | view | edit | create
+    property string mode: "list"           // list | view | editor
     property string selectedId: ""
-    readonly property var current: store.gists.find(g => g.id === selectedId) ?? null
+    readonly property var current: store.gistById(selectedId)
     property string query: ""
-    property string visibility: "all"      // all | public | secret
+    property string visibility: "all"      // all | public | secret | drafts
     property string sortKey: "updated"     // updated | created | name
     property bool confirmDelete: false
-    property string notice: ""             // short confirmation at the bottom ("Link copied")
+    property string confirmDiscardKey: ""  // draft waiting for "Discard?" confirmation
+    property string notice: ""             // short confirmation ("Link copied")
     property string formError: ""
+    property bool overwriteArmed: false    // the gist changed on GitHub since editing started: a second Save goes ahead
+    property int draftGen: 0               // bumps when the buffer is replaced from outside the fields, so they re-read it
     property real now: Date.now()
     Timer { interval: 30000; repeat: true; running: true; onTriggered: root.now = Date.now() }
 
@@ -41,19 +46,17 @@ Scope {
             if (["updated", "created", "name"].includes(j.sortKey)) root.sortKey = j.sortKey;
         } catch (e) {}
         root.stateReady = true;
-        if (store.pendingMode === "create") { store.pendingMode = ""; if (store.draftMode === "") startCreate(); }
-        resumeDraft();
+        if (store.pendingMode === "create") { store.pendingMode = ""; startCreate(); }
+        else if (store.activeKey !== "") { selectedId = store.draftId; mode = "editor"; }   // the editor was open when the popup closed
     }
-    // Reopen an unsaved draft (kept in the store, or restored from disk; that load can finish after the popup opened)
-    function resumeDraft() {
-        if (store.draftMode === "" || mode === "edit" || mode === "create") return;
-        selectedId = store.draftId; mode = store.draftMode; draftGen++;
-        if (store.draftRestored) { store.draftRestored = false; flash(Translation.tr("Restored your unsaved draft (%1)").arg(ago(store.draftSavedAt))); }
-    }
-    Connections { target: root.store; function onDraftRestoredChanged() { if (root.store.draftRestored) root.resumeDraft() } }
+    Component.onDestruction: store.stash()   // save the open draft right away instead of 2 s later
 
     // ---- helpers
     function title(g) { return g.description !== "" ? g.description : (g.files.length ? g.files[0].filename : g.id) }
+    function draftTitle(d) {
+        const named = d.files.find(f => f.name.trim() !== "");
+        return d.desc.trim() !== "" ? d.desc.trim() : named ? named.name : Translation.tr("Untitled gist");
+    }
     function ago(iso) {
         if (!iso) return "";
         const s = (now - Date.parse(iso)) / 1000;
@@ -69,17 +72,31 @@ Scope {
     Timer { id: noticeTimer; interval: 2500; onTriggered: root.notice = "" }
     function copy(text, what) { Quickshell.clipboardText = text; flash(what) }
 
-    // ---- filter (words must all match: description, id, file names, languages, or file content)
+    // ---- list: draft rows (new gists, or drafts of gists deleted on GitHub) first, then gists. All words must match.
     readonly property var hay: store.gists.map(g => ({
         meta: `${g.description} ${g.id} ${g.files.map(f => f.filename + " " + f.language).join(" ")}`.toLowerCase(),
         content: g.files.map(f => f.content.toLowerCase())
     }))
-    readonly property var filtered: {
+    readonly property var entries: {
         const words = query.trim().toLowerCase().split(/\s+/).filter(w => w !== "");
-        const out = [];
+        const drafts = store.drafts, out = [];
+        if (visibility === "all" || visibility === "drafts") {
+            const rows = [];
+            for (const k in drafts) {
+                const d = drafts[k];
+                const orphan = d.mode === "edit" && !store.gistById(d.id);
+                if (d.mode !== "create" && !orphan) continue;
+                const h = `${d.desc} ${d.files.map(f => f.name + " " + f.content).join(" ")}`.toLowerCase();
+                if (words.every(w => h.includes(w))) rows.push({ type: "draft", d: d, orphan: orphan });
+            }
+            rows.sort((a, b) => (b.d.savedAt ?? "").localeCompare(a.d.savedAt ?? ""));
+            out.push(...rows);
+        }
+        const gistRows = [];
         store.gists.forEach((g, gi) => {
             if (visibility === "public" && !g.public) return;
             if (visibility === "secret" && g.public) return;
+            if (visibility === "drafts" && !drafts[g.id]) return;
             const h = hay[gi];
             if (!h) return;
             let excerpt = "";
@@ -92,115 +109,110 @@ Scope {
                     excerpt = `${g.files[fi].filename}: ${i > 30 ? "…" : ""}${c.slice(Math.max(0, i - 30), i + w.length + 60).replace(/\s+/g, " ").trim()}…`;
                 }
             }
-            out.push({ g: g, excerpt: excerpt });
+            gistRows.push({ type: "gist", g: g, excerpt: excerpt });
         });
-        if (sortKey === "name") out.sort((a, b) => title(a.g).localeCompare(title(b.g)));
-        else if (sortKey === "created") out.sort((a, b) => b.g.created_at.localeCompare(a.g.created_at));
-        else out.sort((a, b) => b.g.updated_at.localeCompare(a.g.updated_at));
+        if (sortKey === "name") gistRows.sort((a, b) => title(a.g).localeCompare(title(b.g)));
+        else if (sortKey === "created") gistRows.sort((a, b) => b.g.created_at.localeCompare(a.g.created_at));
+        else gistRows.sort((a, b) => b.g.updated_at.localeCompare(a.g.updated_at));
+        out.push(...gistRows);
         return out;
     }
 
     // ---- navigation
     function openGist(id) { selectedId = id; confirmDelete = false; mode = "view"; Qt.callLater(() => keyScope.forceActiveFocus()) }
-    function toList() { mode = "list"; selectedId = ""; confirmDelete = false; Qt.callLater(() => input.forceActiveFocus()) }
+    function toList() { mode = "list"; selectedId = ""; confirmDelete = false; Qt.callLater(() => filterInput.forceActiveFocus()) }
+    function openEntry(e) { if (e.type === "draft") openDraft(e.d.key); else openGist(e.g.id) }
+    function enterEditor() { formError = ""; overwriteArmed = false; confirmDelete = false; draftGen++; mode = "editor" }
+    function startCreate() {
+        store.beginCreate(); selectedId = ""; enterEditor();
+        Qt.callLater(() => desc.input.forceActiveFocus());
+    }
+    function startEdit(g) { store.beginEdit(g); selectedId = g.id; enterEditor() }
+    function openDraft(key) { store.openDraft(key); selectedId = store.draftId; enterEditor() }
+    // Back from the editor keeps any changes as a draft (marked in the list); only Discard throws them away.
+    function leaveEditor() {
+        const key = store.activeKey, wasEdit = store.draftMode === "edit";
+        store.closeEditor();
+        if (store.drafts[key]) flash(Translation.tr("Kept as a draft"));
+        if (wasEdit && current) openGist(selectedId); else toList();
+    }
+    function discard(key) {
+        const wasOpen = mode === "editor" && key === store.activeKey;
+        const wasEdit = wasOpen ? store.draftMode === "edit" : store.drafts[key]?.mode === "edit";
+        store.discardDraft(key);
+        confirmDiscardKey = "";
+        flash(Translation.tr("Draft discarded"));
+        if (wasOpen) { if (wasEdit && current) openGist(selectedId); else toList(); }
+    }
     function back() {
+        if (menuGist) { menuGist = null; return; }
+        if (confirmDiscardKey !== "") { confirmDiscardKey = ""; return; }
         if (confirmDelete) { confirmDelete = false; return; }
-        if (mode === "edit" || mode === "create") {
-            if (store.draftDirty && !discardArmed) { discardArmed = true; formError = Translation.tr("Unsaved changes: press Esc or Cancel again to discard them."); return; }
-            const wasEdit = mode === "edit";
-            endDraft();
-            if (wasEdit && current) { mode = "view"; keyScope.forceActiveFocus(); } else toList();
-        }
+        if (mode === "editor") { if (!store.busy) leaveEditor(); }
         else if (mode === "view") toList();
-        else if (query !== "") input.text = "";
+        else if (query !== "") filterInput.text = "";
         else root.visible = false;
     }
 
-    // ---- editor. The draft (store.draft: one row per file; orig = name on GitHub, "" for a new file; locked = content
-    // not fully loaded) lives in the store, so closing the popup by accident keeps it: it reopens in the editor.
-    // Every change goes through store.touchDraft(), which autosaves it locally 2 s later (never to GitHub).
-    readonly property var draft: store.draft
-    property int draftGen: 0               // bumps when the draft is replaced so the fields re-read it
-    property bool discardArmed: false      // Esc on a changed draft asks first; a second Esc discards
-    property bool overwriteArmed: false    // the gist changed on GitHub since editing started: a second Save overwrites
-    // Never replace an unsaved draft: reopen it instead (save or discard it first)
-    function guardDraft() {
-        if (!store.hasDraft) return false;
-        resumeDraft(); flash(Translation.tr("Save or discard this draft first"));
-        return true;
-    }
-    function startCreate(content) {
-        if (guardDraft()) return;
-        store.clearSavedDraft();
-        draft.clear(); store.removedFiles = []; formError = ""; store.draftDesc = ""; store.draftPublic = false;
-        draft.append({ orig: "", name: "", content: content ?? "", locked: false });
-        store.draftId = ""; store.draftBase = ""; store.draftMode = "create"; store.draftDirty = false; discardArmed = false; overwriteArmed = false;
-        draftGen++; mode = "create";
-        Qt.callLater(() => desc.input.forceActiveFocus());
-    }
-    function startEdit() {
-        if (!current || guardDraft()) return;
-        store.clearSavedDraft();
-        draft.clear(); store.removedFiles = []; formError = ""; store.draftDesc = current.description; store.draftPublic = current.public;
-        for (const f of current.files) draft.append({ orig: f.filename, name: f.filename, content: f.content, locked: f.truncated || f.clipped });
-        store.draftId = current.id; store.draftBase = current.updated_at; store.draftMode = "edit"; store.draftDirty = false;
-        discardArmed = false; overwriteArmed = false;
-        draftGen++; mode = "edit";
-    }
-    function endDraft() {
-        store.clearSavedDraft();
-        store.draftMode = ""; store.draftId = ""; store.draftBase = ""; store.draftDirty = false; draft.clear();
-        discardArmed = false; overwriteArmed = false; formError = "";
-    }
-    function addFile() { draft.append({ orig: "", name: "", content: "", locked: false }); store.touchDraft() }
-    function removeFile(i) {
-        const o = draft.get(i).orig;
-        if (o !== "") store.removedFiles = store.removedFiles.concat([o]);
-        draft.remove(i); store.touchDraft();
-    }
+    // ---- save: publishes the open draft; the editor stays open on the saved gist
     function save() {
-        if (store.busy) return;
+        if (store.busy || mode !== "editor") return;
         formError = "";
-        if (draft.count === 0) { formError = Translation.tr("A gist needs at least one file."); return; }
+        const d = store.draft;
+        if (d.count === 0) { formError = Translation.tr("A gist needs at least one file."); return; }
+        if (!store.changed) { formError = Translation.tr("No changes to save."); return; }
+        let renamed = false;
+        for (let i = 0; i < d.count; i++) {   // the names GitHub will store, so the fields show them too
+            const n = d.get(i).name, t = n.trim() !== "" ? n.trim() : `gistfile${i + 1}.txt`;
+            if (t !== n) { d.setProperty(i, "name", t); renamed = true; }
+        }
+        if (store.draftDesc !== store.draftDesc.trim()) { store.draftDesc = store.draftDesc.trim(); renamed = true; }
+        if (renamed) { draftGen++; store.touchDraft(); }
         const files = {}, seen = {};
-        for (let i = 0; i < draft.count; i++) {
-            const d = draft.get(i);
-            const name = d.name.trim() !== "" ? d.name.trim() : `gistfile${i + 1}.txt`;
-            if (seen[name]) { formError = Translation.tr("Two files are named \"%1\".").arg(name); return; }
-            seen[name] = true;
-            if (!d.locked && d.content.trim() === "") { formError = Translation.tr("\"%1\" is empty; GitHub doesn't allow empty files.").arg(name); return; }
-            if (mode === "create" || d.orig === "") { files[name] = { content: d.content }; continue; }
-            const o = current?.files.find(f => f.filename === d.orig);
-            const e = {};
-            if (name !== d.orig) e.filename = name;
-            if (!d.locked && (!o || d.content !== o.content)) e.content = d.content;
-            if (Object.keys(e).length) files[d.orig] = e;
+        for (let i = 0; i < d.count; i++) {
+            const f = d.get(i);
+            if (seen[f.name]) { formError = Translation.tr("Two files are named \"%1\".").arg(f.name); return; }
+            seen[f.name] = true;
+            if (!f.locked && f.content.trim() === "") { formError = Translation.tr("\"%1\" is empty; GitHub doesn't allow empty files.").arg(f.name); return; }
+            if (store.draftMode === "create" || f.orig === "") { files[f.name] = { content: f.content }; continue; }
+            const e = {};   // only what you changed: files you didn't touch keep whatever GitHub has
+            if (f.name !== f.orig) e.filename = f.name;
+            if (!f.locked && f.content !== f.origContent) e.content = f.content;
+            if (Object.keys(e).length) files[f.orig] = e;
         }
         for (const r of store.removedFiles) files[r] = null;
-        // A draft can be old (it survives restarts): don't silently overwrite changes made on GitHub in the meantime.
-        if (mode === "edit" && current && store.draftBase !== "" && current.updated_at !== store.draftBase && !overwriteArmed) {
-            overwriteArmed = true;
-            formError = Translation.tr("This gist changed on GitHub (%1) after you started editing. Save again to overwrite it with your version.").arg(ago(current.updated_at));
+        if (store.draftMode === "create") {
+            store.publish(["create"], JSON.stringify({ description: store.draftDesc, public: store.draftPublic, files: files }), (ok, id) => {
+                if (!ok) return;
+                if (mode === "editor") selectedId = id;
+                flash(Translation.tr("Gist created · link copied"));
+            });
             return;
         }
-        if (mode === "create") {
-            store.run(["create"], JSON.stringify({ description: store.draftDesc.trim(), public: store.draftPublic, files: files }), (ok, out) => {
-                if (!ok) return;
-                const [id, url] = out.split("\n").pop().split(" ");
-                Quickshell.clipboardText = url;
-                endDraft(); openGist(id); flash(Translation.tr("Gist created · link copied"));
-            });
-        } else {
-            const id = store.draftId;
-            store.run(["update", id], JSON.stringify({ description: store.draftDesc.trim(), files: files }), ok => {
-                if (!ok) return;
-                endDraft(); openGist(id); flash(Translation.tr("Saved"));
-            });
+        if (current && store.draftBase !== "" && current.updated_at !== store.draftBase && !overwriteArmed) {
+            overwriteArmed = true;
+            formError = Translation.tr("This gist changed on GitHub (%1) after you started editing. Save again to apply your changes; files you edited replace the GitHub versions.").arg(ago(current.updated_at));
+            return;
         }
+        const payload = { description: store.draftDesc };
+        if (Object.keys(files).length) payload.files = files;
+        store.publish(["update", store.draftId], JSON.stringify(payload), ok => {
+            if (!ok) return;
+            overwriteArmed = false;
+            flash(Translation.tr("Saved to GitHub"));
+        });
     }
     function remove() {
-        const id = selectedId;
-        store.run(["delete", id], "", ok => { if (ok) { toList(); flash(Translation.tr("Gist deleted")); } else confirmDelete = false; });
+        store.removeGist(selectedId, ok => {
+            if (!ok) { confirmDelete = false; return; }
+            toList(); flash(Translation.tr("Gist deleted"));
+        });
+    }
+    function addFile() { store.draft.append({ orig: "", name: "", content: "", origContent: "", locked: false }); store.touchDraft() }
+    function removeFile(i) {
+        const o = store.draft.get(i).orig;
+        if (o !== "") store.removedFiles = store.removedFiles.concat([o]);
+        store.draft.remove(i); store.touchDraft();
     }
     Process {  // "Paste" in the editor: the clipboard into the first empty file (or a new one)
         id: pasteProc
@@ -208,11 +220,12 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (text === "") return;
+                const d = root.store.draft;
                 let i = -1;
-                for (let k = 0; k < draft.count; k++) if (!draft.get(k).locked && draft.get(k).content.trim() === "") { i = k; break; }
-                if (i < 0) { root.addFile(); i = draft.count - 1; }
-                draft.setProperty(i, "content", text);
-                store.touchDraft();
+                for (let k = 0; k < d.count; k++) if (!d.get(k).locked && d.get(k).content.trim() === "") { i = k; break; }
+                if (i < 0) { root.addFile(); i = d.count - 1; }
+                d.setProperty(i, "content", text);
+                root.store.touchDraft();
                 root.draftGen++;
             }
         }
@@ -237,6 +250,7 @@ Scope {
             text: ib.symbol
             iconSize: Appearance.font.pixelSize.larger
             color: ib.iconColor
+            opacity: ib.enabled ? 1 : 0.4
         }
         StyledToolTip { text: ib.tip; visible: ib.hovered && ib.tip !== "" }
     }
@@ -273,12 +287,42 @@ Scope {
             color: Appearance.colors.colSubtext
         }
     }
+    component DraftPill: Rectangle {  // "Draft" marker on list rows
+        implicitHeight: pillRow.implicitHeight + 4
+        implicitWidth: pillRow.implicitWidth + 12
+        radius: Appearance.rounding.full
+        color: Appearance.colors.colTertiaryContainer
+        RowLayout {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: 3
+            MaterialSymbol { text: "edit_note"; iconSize: Appearance.font.pixelSize.small; color: Appearance.colors.colOnTertiaryContainer }
+            StyledText { text: Translation.tr("Draft"); font.pixelSize: Appearance.font.pixelSize.smallest; font.weight: Font.Medium; color: Appearance.colors.colOnTertiaryContainer }
+        }
+    }
+    // Text cursor: shown at once when a field gets focus or the cursor moves, then blinks (Qt's own cursor could start
+    // in its "off" phase, so it appeared only after a delay).
+    component Caret: Rectangle {
+        id: caret
+        width: 2
+        color: Appearance.colors.colPrimary
+        visible: !!parent && parent.activeFocus && !parent.readOnly && parent.selectionStart === parent.selectionEnd
+        function wake() { opacity = 1; blink.restart() }
+        onVisibleChanged: if (visible) wake()
+        Connections {
+            target: caret.parent
+            ignoreUnknownSignals: true
+            function onCursorPositionChanged() { caret.wake() }
+            function onTextChanged() { caret.wake() }
+        }
+        Timer { id: blink; interval: 530; repeat: true; running: caret.visible; onTriggered: caret.opacity = caret.opacity > 0 ? 0 : 1 }
+    }
     component Field: Rectangle {  // single-line input in a pill, like the task manager's filter
         id: fld
         property alias input: fieldInput
         property string placeholder
-        signal edited(string text)
         property bool mono: false
+        signal edited(string text)
         Layout.fillWidth: true
         implicitHeight: 38
         radius: Appearance.rounding.small
@@ -292,6 +336,7 @@ Scope {
             color: Appearance.colors.colOnLayer2
             font.family: fld.mono ? Appearance.font.family.monospace : Appearance.font.family.main
             clip: true
+            cursorDelegate: Component { Caret {} }
             onTextChanged: fld.edited(text)
             StyledText {
                 visible: fieldInput.text === ""
@@ -301,10 +346,38 @@ Scope {
             }
         }
     }
+    component ConfirmBar: Rectangle {  // inline "are you sure" row (delete gist, discard draft)
+        id: cb
+        property string text
+        property string action
+        property bool busy: false
+        signal confirmed()
+        signal cancelled()
+        Layout.fillWidth: true
+        implicitHeight: cbRow.implicitHeight + 16
+        radius: Appearance.rounding.small
+        color: Appearance.colors.colErrorContainer
+        RowLayout {
+            id: cbRow
+            anchors { fill: parent; margins: 8; leftMargin: 12 }
+            spacing: 8
+            StyledText { Layout.fillWidth: true; wrapMode: Text.Wrap; text: cb.text; color: Appearance.colors.colOnErrorContainer }
+            Chip { label: Translation.tr("Cancel"); onClicked: cb.cancelled() }
+            RippleButton {
+                implicitHeight: 30; implicitWidth: cbText.implicitWidth + 24
+                buttonRadius: Appearance.rounding.full
+                colBackground: "#d32f2f"; colBackgroundHover: "#e53935"
+                enabled: !cb.busy
+                onClicked: cb.confirmed()
+                contentItem: StyledText { id: cbText; horizontalAlignment: Text.AlignHCenter; text: cb.action; color: "white" }
+            }
+        }
+    }
 
     // Same geometry as the Docker/task-manager popups: left edge like the left sidebar, full height below the bar.
     // A click-away layer closes it (a click anywhere, including the bar button).
     PanelWindow {
+        screen: root.screen ?? Quickshell.screens[0]
         mask: Region { item: root.visible ? dismissArea : null }
         color: "transparent"
         anchors { left: true; right: true; top: true; bottom: true }
@@ -316,6 +389,7 @@ Scope {
     }
     PanelWindow {
         id: win
+        screen: root.screen ?? Quickshell.screens[0]
         color: "transparent"
         anchors { top: true; left: true; bottom: true }
         implicitWidth: 480 + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
@@ -325,7 +399,7 @@ Scope {
         WlrLayershell.namespace: "quickshell:sidebarLeft"  // same Hyprland layer rule (slide left) as the left sidebar
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-        Component.onCompleted: if (root.mode === "list") input.forceActiveFocus()
+        Component.onCompleted: if (root.mode === "list") filterInput.forceActiveFocus()
         StyledRectangularShadow { target: card }
 
     Rectangle {
@@ -345,12 +419,12 @@ Scope {
         id: keyScope
         anchors.fill: parent
         focus: true
-        // Esc = back/close, Ctrl+S = save, Ctrl+N = new gist (fields don't consume these, so they bubble up here)
+        // Esc = back/close (the editor keeps your draft), Ctrl+S = save, Ctrl+N = new gist (fields don't consume these)
         Keys.onPressed: event => {
             const ctrl = event.modifiers & Qt.ControlModifier;
-            if (event.key === Qt.Key_Escape) { if (root.menuGist) root.menuGist = null; else root.back(); event.accepted = true; }
-            else if (ctrl && event.key === Qt.Key_S && (root.mode === "edit" || root.mode === "create")) { root.save(); event.accepted = true; }
-            else if (ctrl && event.key === Qt.Key_N && root.mode !== "edit" && root.mode !== "create") { root.startCreate(); event.accepted = true; }
+            if (event.key === Qt.Key_Escape) { root.back(); event.accepted = true; }
+            else if (ctrl && event.key === Qt.Key_S && root.mode === "editor") { root.save(); event.accepted = true; }
+            else if (ctrl && event.key === Qt.Key_N) { root.startCreate(); event.accepted = true; }
         }
 
         ColumnLayout {
@@ -362,15 +436,21 @@ Scope {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6
-                IconBtn { visible: root.mode !== "list"; symbol: "arrow_back"; tip: root.mode === "edit" || root.mode === "create" ? Translation.tr("Cancel (Esc)") : Translation.tr("Back (Esc)"); onClicked: root.back() }
+                IconBtn {
+                    visible: root.mode !== "list"
+                    symbol: "arrow_back"
+                    tip: root.mode === "editor" ? Translation.tr("Back (Esc) · keeps your changes as a draft") : Translation.tr("Back (Esc)")
+                    enabled: !(root.mode === "editor" && root.store.busy)
+                    onClicked: root.back()
+                }
                 MaterialSymbol { visible: root.mode === "list"; text: "data_object"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colOnLayer2 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
                     StyledText {
                         Layout.fillWidth: true
-                        text: root.mode === "create" ? Translation.tr("New gist")
-                            : root.mode === "edit" ? Translation.tr("Edit gist")
+                        text: root.mode === "editor" ? (root.store.draftMode === "create" ? Translation.tr("New gist")
+                                                         : root.current ? root.title(root.current) : Translation.tr("Edit gist"))
                             : root.mode === "view" ? (root.current ? root.title(root.current) : Translation.tr("Gist"))
                             : Translation.tr("Gists")
                         font.pixelSize: Appearance.font.pixelSize.larger
@@ -383,10 +463,16 @@ Scope {
                         text: root.mode === "list"
                             ? (root.store.syncing ? Translation.tr("Syncing…")
                                : root.store.syncError !== "" ? Translation.tr("Sync failed · showing cached gists")
-                               : `${root.store.gists.length} ${Translation.tr("gists")}` + (root.store.lastSync ? ` · ${Translation.tr("synced")} ${root.ago(root.store.lastSync)}` : ""))
-                            : root.current && root.mode !== "create"
+                               : `${root.store.gists.length} ${Translation.tr("gists")}`
+                                 + (root.store.draftCount ? ` · ${root.store.draftCount} ${root.store.draftCount === 1 ? Translation.tr("draft") : Translation.tr("drafts")}` : "")
+                                 + (root.store.lastSync ? ` · ${Translation.tr("synced")} ${root.ago(root.store.lastSync)}` : ""))
+                            : root.mode === "editor"
+                                ? (root.store.draftMode === "create" ? Translation.tr("Not on GitHub until you create it")
+                                   : !root.current ? Translation.tr("This gist no longer exists on GitHub")
+                                   : `${Translation.tr("Editing")} · ${root.current.public ? Translation.tr("Public") : Translation.tr("Secret")}`)
+                            : root.current
                                 ? `${root.current.public ? Translation.tr("Public") : Translation.tr("Secret")} · ${root.current.files.length} ${root.current.files.length === 1 ? Translation.tr("file") : Translation.tr("files")} · ${Translation.tr("updated")} ${root.ago(root.current.updated_at)}`
-                                : root.mode === "create" ? Translation.tr("Ctrl+S to save") : ""
+                                : ""
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: root.mode === "list" && root.store.syncError !== "" ? "#ef5350" : Appearance.colors.colSubtext
                         elide: Text.ElideRight
@@ -401,44 +487,74 @@ Scope {
                     onClicked: root.store.sync()
                 }
                 // view actions
-                IconBtn { visible: root.mode === "view" && root.current; symbol: "link"; tip: Translation.tr("Copy link"); onClicked: root.copy(root.current.html_url, Translation.tr("Link copied")) }
-                IconBtn { visible: root.mode === "view" && root.current; symbol: "open_in_new"; tip: Translation.tr("Open on GitHub"); onClicked: Qt.openUrlExternally(root.current.html_url) }
-                IconBtn { visible: root.mode === "view" && root.current; symbol: "edit"; tip: Translation.tr("Edit"); onClicked: root.startEdit() }
-                IconBtn { visible: root.mode === "view" && root.current; symbol: "delete"; tip: Translation.tr("Delete"); iconColor: "#ef5350"; onClicked: root.confirmDelete = true }
-                // editor actions
-                IconBtn { visible: root.mode === "edit" || root.mode === "create"; symbol: "content_paste"; tip: Translation.tr("Paste clipboard into a file"); onClicked: pasteProc.running = true }
-                IconBtn { visible: root.mode === "edit" || root.mode === "create"; symbol: "note_add"; tip: Translation.tr("Add file"); onClicked: root.addFile() }
+                IconBtn { visible: root.mode === "view" && !!root.current; symbol: "link"; tip: Translation.tr("Copy link"); onClicked: root.copy(root.current.html_url, Translation.tr("Link copied")) }
+                IconBtn { visible: root.mode === "view" && !!root.current; symbol: "open_in_new"; tip: Translation.tr("Open on GitHub"); onClicked: Qt.openUrlExternally(root.current.html_url) }
+                IconBtn {
+                    visible: root.mode === "view" && !!root.current
+                    symbol: "edit"; tip: root.store.drafts[root.selectedId] ? Translation.tr("Continue your draft") : Translation.tr("Edit")
+                    onClicked: root.startEdit(root.current)
+                }
+                IconBtn { visible: root.mode === "view" && !!root.current; symbol: "delete"; tip: Translation.tr("Delete"); iconColor: "#ef5350"; onClicked: root.confirmDelete = true }
+                // editor actions; Save is the primary action, top right
+                IconBtn { visible: root.mode === "editor"; symbol: "content_paste"; tip: Translation.tr("Paste clipboard into a file"); onClicked: pasteProc.running = true }
+                IconBtn { visible: root.mode === "editor"; symbol: "note_add"; tip: Translation.tr("Add file"); onClicked: root.addFile() }
+                IconBtn {
+                    visible: root.mode === "editor" && (root.store.changed || !!root.store.drafts[root.store.activeKey])
+                    symbol: "delete_sweep"
+                    tip: root.store.draftMode === "create" ? Translation.tr("Discard draft") : Translation.tr("Discard changes")
+                    iconColor: Appearance.colors.colSubtext
+                    onClicked: root.confirmDiscardKey = root.store.activeKey
+                }
+                RippleButton {
+                    id: saveBtn
+                    visible: root.mode === "editor"
+                    readonly property bool ready: root.store.changed && !root.store.busy
+                    implicitHeight: 32; implicitWidth: saveRow.implicitWidth + 24
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: ready ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
+                    colBackgroundHover: ready ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2
+                    enabled: ready
+                    onClicked: root.save()
+                    contentItem: RowLayout {
+                        id: saveRow
+                        spacing: 4
+                        MaterialSymbol {
+                            text: root.store.draftMode === "create" ? "cloud_upload" : "save"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: saveBtn.ready ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                        }
+                        StyledText {
+                            text: root.store.busy ? Translation.tr("Saving…") : root.store.draftMode === "create" ? Translation.tr("Create") : Translation.tr("Save")
+                            font.weight: Font.Medium
+                            color: saveBtn.ready ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                        }
+                    }
+                    StyledToolTip {
+                        text: root.store.changed ? "Ctrl+S" : Translation.tr("No unsaved changes")
+                        visible: saveBtn.hovered
+                    }
+                }
             }
 
             Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border }
 
-            // Delete confirmation
-            Rectangle {
+            ConfirmBar {
                 visible: root.confirmDelete && root.mode === "view"
-                Layout.fillWidth: true
-                implicitHeight: delRow.implicitHeight + 16
-                radius: Appearance.rounding.small
-                color: Appearance.colors.colErrorContainer
-                RowLayout {
-                    id: delRow
-                    anchors { fill: parent; margins: 8; leftMargin: 12 }
-                    spacing: 8
-                    StyledText {
-                        Layout.fillWidth: true
-                        wrapMode: Text.Wrap
-                        text: Translation.tr("Delete this gist on GitHub? This can't be undone.")
-                        color: Appearance.colors.colOnErrorContainer
-                    }
-                    Chip { label: Translation.tr("Cancel"); onClicked: root.confirmDelete = false }
-                    RippleButton {
-                        implicitHeight: 30; implicitWidth: delText.implicitWidth + 24
-                        buttonRadius: Appearance.rounding.full
-                        colBackground: "#d32f2f"; colBackgroundHover: "#e53935"
-                        enabled: !root.store.busy
-                        onClicked: root.remove()
-                        contentItem: StyledText { id: delText; horizontalAlignment: Text.AlignHCenter; text: root.store.busy ? Translation.tr("Deleting…") : Translation.tr("Delete"); color: "white" }
-                    }
-                }
+                text: Translation.tr("Delete this gist on GitHub? This can't be undone.")
+                action: root.store.busy ? Translation.tr("Deleting…") : Translation.tr("Delete")
+                busy: root.store.busy
+                onConfirmed: root.remove()
+                onCancelled: root.confirmDelete = false
+            }
+            ConfirmBar {
+                readonly property var d: root.store.drafts[root.confirmDiscardKey] ?? null
+                readonly property bool isNew: d ? d.mode === "create" : root.store.draftMode === "create"
+                visible: root.confirmDiscardKey !== ""
+                text: isNew ? Translation.tr("Discard this draft? It was never saved to GitHub.")
+                            : Translation.tr("Discard your unsaved changes? The gist on GitHub stays as it is.")
+                action: Translation.tr("Discard")
+                onConfirmed: root.discard(root.confirmDiscardKey)
+                onCancelled: root.confirmDiscardKey = ""
             }
 
             // ---------------- list ----------------
@@ -453,23 +569,24 @@ Scope {
                     spacing: 8
                     MaterialSymbol { text: "search"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colSubtext }
                     StyledTextInput {
-                        id: input
+                        id: filterInput
                         Layout.fillWidth: true
                         color: Appearance.colors.colOnLayer2
                         font.pixelSize: Appearance.font.pixelSize.normal
                         clip: true
+                        cursorDelegate: Component { Caret {} }
                         onTextChanged: root.query = text
                         Keys.onEscapePressed: root.back()
-                        Keys.onReturnPressed: if (root.filtered.length) root.openGist(root.filtered[0].g.id)
-                        Keys.onEnterPressed: if (root.filtered.length) root.openGist(root.filtered[0].g.id)
+                        Keys.onReturnPressed: if (root.entries.length) root.openEntry(root.entries[0])
+                        Keys.onEnterPressed: if (root.entries.length) root.openEntry(root.entries[0])
                         StyledText {
-                            visible: input.text === ""
+                            visible: filterInput.text === ""
                             anchors.verticalCenter: parent.verticalCenter
                             text: Translation.tr("Filter by description, file, language or content…")
                             color: Appearance.colors.colSubtext
                         }
                     }
-                    IconBtn { visible: input.text !== ""; symbol: "close"; implicitWidth: 26; implicitHeight: 26; onClicked: input.text = "" }
+                    IconBtn { visible: filterInput.text !== ""; symbol: "close"; implicitWidth: 26; implicitHeight: 26; onClicked: filterInput.text = "" }
                 }
             }
             RowLayout {
@@ -479,6 +596,12 @@ Scope {
                 Chip { label: Translation.tr("All"); active: root.visibility === "all"; onClicked: root.visibility = "all" }
                 Chip { label: Translation.tr("Public"); active: root.visibility === "public"; onClicked: root.visibility = "public" }
                 Chip { label: Translation.tr("Secret"); active: root.visibility === "secret"; onClicked: root.visibility = "secret" }
+                Chip {
+                    visible: root.store.draftCount > 0 || root.visibility === "drafts"
+                    label: `${Translation.tr("Drafts")} ${root.store.draftCount}`
+                    active: root.visibility === "drafts"
+                    onClicked: root.visibility = "drafts"
+                }
                 Item { Layout.fillWidth: true }
                 RippleButton {
                     implicitHeight: 26
@@ -509,19 +632,23 @@ Scope {
                 Layout.fillHeight: true
                 clip: true
                 spacing: 4
-                model: root.filtered
+                model: root.entries
                 boundsBehavior: Flickable.StopAtBounds
+                // One row type for both: a gist (with a Draft pill if you have unsaved changes to it) or a draft of a new gist
                 delegate: RippleButton {
                     id: rowBtn
                     required property var modelData
-                    readonly property var g: modelData.g
+                    readonly property bool isDraft: modelData.type === "draft"
+                    readonly property var g: modelData.g ?? null
+                    readonly property var d: isDraft ? modelData.d : (root.store.drafts[g.id] ?? null)
                     width: list.width
                     implicitHeight: rowCol.implicitHeight + 16
                     buttonRadius: Appearance.rounding.small
                     colBackground: Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
-                    onClicked: root.openGist(g.id)
+                    onClicked: root.openEntry(modelData)
                     altAction: () => {
+                        if (rowBtn.isDraft) { root.confirmDiscardKey = rowBtn.d.key; return; }
                         const p = rowBtn.mapToItem(card, rowBtn.width - 220, rowBtn.height / 2);
                         root.menuX = p.x; root.menuY = p.y; root.menuGist = rowBtn.g;
                     }
@@ -531,32 +658,41 @@ Scope {
                             Layout.alignment: Qt.AlignTop
                             Layout.topMargin: 2
                             Layout.leftMargin: 4
-                            text: rowBtn.g.public ? "public" : "lock"
+                            text: rowBtn.isDraft ? "edit_note" : rowBtn.g.public ? "public" : "lock"
                             iconSize: Appearance.font.pixelSize.larger
-                            color: rowBtn.g.public ? Appearance.colors.colSubtext : Appearance.colors.colPrimary
+                            color: rowBtn.isDraft ? Appearance.colors.colTertiary : rowBtn.g.public ? Appearance.colors.colSubtext : Appearance.colors.colPrimary
                         }
                         ColumnLayout {
                             id: rowCol
                             Layout.fillWidth: true
                             spacing: 2
-                            StyledText {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: root.title(rowBtn.g)
-                                font.weight: Font.Medium
-                                elide: Text.ElideRight
-                                color: Appearance.colors.colOnLayer2
+                                spacing: 6
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: rowBtn.isDraft ? root.draftTitle(rowBtn.d) : root.title(rowBtn.g)
+                                    font.weight: Font.Medium
+                                    font.italic: rowBtn.isDraft
+                                    elide: Text.ElideRight
+                                    color: Appearance.colors.colOnLayer2
+                                }
+                                DraftPill { visible: rowBtn.d !== null }
                             }
                             StyledText {
                                 Layout.fillWidth: true
-                                text: `${rowBtn.g.files.map(f => f.filename).join(", ")} · ${root.ago(rowBtn.g.updated_at)}`
+                                text: rowBtn.isDraft
+                                    ? `${rowBtn.modelData.orphan ? Translation.tr("Gist deleted on GitHub") : Translation.tr("New gist")} · ${Translation.tr("saved on this computer")} ${root.ago(rowBtn.d.savedAt)}`
+                                    : `${rowBtn.g.files.map(f => f.filename).join(", ")} · ${root.ago(rowBtn.g.updated_at)}`
+                                      + (rowBtn.d ? ` · ${Translation.tr("unsaved changes")} ${root.ago(rowBtn.d.savedAt)}` : "")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 elide: Text.ElideRight
                                 color: Appearance.colors.colSubtext
                             }
                             StyledText {  // where a content match was found
-                                visible: rowBtn.modelData.excerpt !== ""
+                                visible: !rowBtn.isDraft && rowBtn.modelData.excerpt !== ""
                                 Layout.fillWidth: true
-                                text: rowBtn.modelData.excerpt
+                                text: rowBtn.modelData.excerpt ?? ""
                                 textFormat: Text.PlainText
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.family: Appearance.font.family.monospace
@@ -564,20 +700,24 @@ Scope {
                                 color: Appearance.colors.colPrimary
                             }
                             Flow {
+                                visible: !rowBtn.isDraft
                                 Layout.fillWidth: true
                                 spacing: 4
                                 Repeater {
-                                    model: [...new Set(rowBtn.g.files.map(f => f.language).filter(l => l !== ""))]
+                                    model: rowBtn.isDraft ? [] : [...new Set(rowBtn.g.files.map(f => f.language).filter(l => l !== ""))]
                                     delegate: LangChip { required property string modelData; text: modelData }
                                 }
                             }
                         }
                         IconBtn {
                             Layout.alignment: Qt.AlignVCenter
-                            symbol: "content_copy"
-                            tip: Translation.tr("Copy content")
+                            symbol: rowBtn.isDraft ? "delete_sweep" : "content_copy"
+                            tip: rowBtn.isDraft ? Translation.tr("Discard draft") : Translation.tr("Copy content")
                             iconColor: Appearance.colors.colSubtext
-                            onClicked: root.copy(root.allContent(rowBtn.g), Translation.tr("Content copied"))
+                            onClicked: {
+                                if (rowBtn.isDraft) root.confirmDiscardKey = rowBtn.d.key;
+                                else root.copy(root.allContent(rowBtn.g), Translation.tr("Content copied"));
+                            }
                         }
                     }
                 }
@@ -585,7 +725,7 @@ Scope {
                 ColumnLayout {  // empty states
                     anchors.centerIn: parent
                     width: parent.width - 40
-                    visible: root.filtered.length === 0
+                    visible: root.entries.length === 0
                     spacing: 10
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignHCenter
@@ -598,7 +738,8 @@ Scope {
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
                         color: Appearance.colors.colSubtext
-                        text: root.store.gists.length > 0 ? Translation.tr("No gists match")
+                        text: root.visibility === "drafts" ? Translation.tr("No drafts")
+                            : root.store.gists.length > 0 ? Translation.tr("No gists match")
                             : root.store.syncing ? Translation.tr("Loading your gists…")
                             : root.store.syncError !== "" ? root.store.syncError
                             : Translation.tr("No gists yet. Press + or Ctrl+N to create one.")
@@ -607,6 +748,30 @@ Scope {
             }
 
             // ---------------- view ----------------
+            Rectangle {  // you have a draft for this gist
+                id: viewDraft
+                readonly property var d: root.store.drafts[root.selectedId] ?? null
+                visible: root.mode === "view" && d !== null
+                Layout.fillWidth: true
+                implicitHeight: draftRow.implicitHeight + 16
+                radius: Appearance.rounding.small
+                color: Appearance.colors.colTertiaryContainer
+                RowLayout {
+                    id: draftRow
+                    anchors { fill: parent; margins: 8; leftMargin: 12 }
+                    spacing: 8
+                    MaterialSymbol { text: "edit_note"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnTertiaryContainer }
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        text: Translation.tr("You have unsaved changes to this gist (%1). Below is the GitHub version.").arg(root.ago(viewDraft.d?.savedAt ?? ""))
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnTertiaryContainer
+                    }
+                    Chip { label: Translation.tr("Discard"); onClicked: root.confirmDiscardKey = root.selectedId }
+                    Chip { label: Translation.tr("Continue"); active: true; onClicked: root.startEdit(root.current) }
+                }
+            }
             StyledListView {
                 id: fileList
                 visible: root.mode === "view"
@@ -676,10 +841,10 @@ Scope {
                 }
             }
 
-            // ---------------- create / edit ----------------
+            // ---------------- editor (create / edit) ----------------
             StyledFlickable {
                 id: edFlick
-                visible: root.mode === "edit" || root.mode === "create"
+                visible: root.mode === "editor"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -701,18 +866,20 @@ Scope {
                         placeholder: Translation.tr("Description (optional)")
                         onEdited: text => { if (text !== root.store.draftDesc) { root.store.draftDesc = text; root.store.touchDraft(); } }
                         Connections { target: root; function onDraftGenChanged() { desc.input.text = root.store.draftDesc } }
-                        Component.onCompleted: input.text = root.store.draftDesc
+                        Component.onCompleted: desc.input.text = root.store.draftDesc
                     }
                     RowLayout {
+                        id: visRow
                         Layout.fillWidth: true
                         spacing: 4
-                        Chip { visible: root.mode === "create" || !root.store.draftPublic; label: Translation.tr("Secret"); active: !root.store.draftPublic; onClicked: if (root.mode === "create") { root.store.draftPublic = false; root.store.touchDraft(); } }
-                        Chip { visible: root.mode === "create" || root.store.draftPublic; label: Translation.tr("Public"); active: root.store.draftPublic; onClicked: if (root.mode === "create") { root.store.draftPublic = true; root.store.touchDraft(); } }
+                        readonly property bool isNew: root.store.draftMode === "create"
+                        Chip { visible: visRow.isNew || !root.store.draftPublic; label: Translation.tr("Secret"); active: !root.store.draftPublic; onClicked: if (visRow.isNew) { root.store.draftPublic = false; root.store.touchDraft(); } }
+                        Chip { visible: visRow.isNew || root.store.draftPublic; label: Translation.tr("Public"); active: root.store.draftPublic; onClicked: if (visRow.isNew) { root.store.draftPublic = true; root.store.touchDraft(); } }
                         StyledText {
                             Layout.fillWidth: true
                             Layout.leftMargin: 6
                             wrapMode: Text.Wrap
-                            text: root.mode === "edit" ? Translation.tr("GitHub can't change a gist's visibility after creation.")
+                            text: !visRow.isNew ? Translation.tr("GitHub can't change a gist's visibility after creation.")
                                 : root.store.draftPublic ? Translation.tr("Listed on your profile and searchable.")
                                 : Translation.tr("Unlisted: only people with the link can see it.")
                             font.pixelSize: Appearance.font.pixelSize.smaller
@@ -720,7 +887,7 @@ Scope {
                         }
                     }
                     Repeater {
-                        model: root.draft
+                        model: root.store.draft
                         delegate: ColumnLayout {
                             id: fileEd
                             required property int index
@@ -736,12 +903,12 @@ Scope {
                                     id: nameField
                                     mono: true
                                     placeholder: Translation.tr("File name with extension, e.g. notes.md")
-                                    onEdited: text => { if (text !== fileEd.name) { root.draft.setProperty(fileEd.index, "name", text); root.store.touchDraft(); } }
-                                    Connections { target: root; function onDraftGenChanged() { nameField.input.text = root.draft.get(fileEd.index)?.name ?? "" } }
-                                    Component.onCompleted: input.text = fileEd.name
+                                    onEdited: text => { if (text !== fileEd.name) { root.store.draft.setProperty(fileEd.index, "name", text); root.store.touchDraft(); } }
+                                    Connections { target: root; function onDraftGenChanged() { nameField.input.text = root.store.draft.get(fileEd.index)?.name ?? "" } }
+                                    Component.onCompleted: nameField.input.text = fileEd.name
                                 }
                                 IconBtn {
-                                    visible: root.draft.count > 1
+                                    visible: root.store.draft.count > 1
                                     symbol: "delete"; tip: Translation.tr("Remove file")
                                     iconColor: Appearance.colors.colSubtext
                                     onClicked: root.removeFile(fileEd.index)
@@ -765,9 +932,10 @@ Scope {
                                     font.family: Appearance.font.family.monospace
                                     font.pixelSize: Appearance.font.pixelSize.smaller
                                     background: null
-                                    onTextChanged: if (!fileEd.locked && text !== fileEd.content) { root.draft.setProperty(fileEd.index, "content", text); root.store.touchDraft(); }
+                                    cursorDelegate: Component { Caret {} }
+                                    onTextChanged: if (!fileEd.locked && text !== fileEd.content) { root.store.draft.setProperty(fileEd.index, "content", text); root.store.touchDraft(); }
                                     onCursorRectangleChanged: if (activeFocus) edFlick.reveal(area, cursorRectangle)
-                                    Connections { target: root; function onDraftGenChanged() { area.text = root.draft.get(fileEd.index)?.content ?? "" } }
+                                    Connections { target: root; function onDraftGenChanged() { area.text = root.store.draft.get(fileEd.index)?.content ?? "" } }
                                     Component.onCompleted: text = fileEd.content
                                 }
                             }
@@ -783,60 +951,30 @@ Scope {
                     }
                 }
             }
-            RowLayout {  // editor footer
-                visible: root.mode === "edit" || root.mode === "create"
-                Layout.fillWidth: true
-                spacing: 8
-                StyledText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.Wrap
-                    readonly property bool isError: root.formError !== "" || root.store.actError !== ""
-                    text: root.formError !== "" ? root.formError : root.store.actError !== "" ? root.store.actError
-                        : root.notice !== "" ? root.notice
-                        : root.store.draftSavedAt !== "" ? Translation.tr("Draft saved on this computer · %1").arg(root.ago(root.store.draftSavedAt))
-                        : root.store.draftDirty ? Translation.tr("Unsaved (the draft is kept on this computer)") : ""
-                    color: isError ? "#ef5350" : root.notice !== "" ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                }
-                Chip { label: Translation.tr("Cancel"); onClicked: root.back() }
-                RippleButton {
-                    implicitHeight: 34; implicitWidth: saveRow.implicitWidth + 28
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    enabled: !root.store.busy
-                    onClicked: root.save()
-                    contentItem: RowLayout {
-                        id: saveRow
-                        spacing: 6
-                        Item { Layout.fillWidth: true }
-                        MaterialSymbol { text: root.mode === "create" ? "cloud_upload" : "save"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnPrimary }
-                        StyledText {
-                            text: root.store.busy ? Translation.tr("Saving…") : root.mode === "create" ? Translation.tr("Create") : Translation.tr("Save")
-                            color: Appearance.colors.colOnPrimary
-                        }
-                        Item { Layout.fillWidth: true }
-                    }
-                    StyledToolTip { text: "Ctrl+S"; visible: parent.hovered }
-                }
-            }
 
-            // Footer: confirmation, last error, or hints
+            // Footer: error or confirmation, else the draft state, else hints
             StyledText {
-                visible: root.mode === "list" || root.mode === "view"
+                readonly property bool isError: (root.formError !== "" && root.mode === "editor") || root.store.actError !== ""
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
+                horizontalAlignment: root.mode === "editor" && !isError ? Text.AlignLeft : Text.AlignHCenter
                 wrapMode: Text.Wrap
-                text: root.notice !== "" ? root.notice
+                text: root.formError !== "" && root.mode === "editor" ? root.formError
                     : root.store.actError !== "" ? root.store.actError
+                    : root.notice !== "" ? root.notice
+                    : root.mode === "editor"
+                        ? (root.store.changed
+                            ? (root.store.savedAt !== "" ? Translation.tr("Unsaved changes · draft kept on this computer (%1)").arg(root.ago(root.store.savedAt))
+                                                         : Translation.tr("Unsaved changes"))
+                              + " · " + Translation.tr("Esc goes back and keeps the draft")
+                            : root.store.draftMode === "edit" ? Translation.tr("No unsaved changes") : Translation.tr("Ctrl+S creates the gist"))
                     : root.mode === "list" ? Translation.tr("Enter opens the first match · Ctrl+N new · right-click a gist for actions")
                     : Translation.tr("Select text to copy part of a file · Esc goes back")
                 font.pixelSize: Appearance.font.pixelSize.smallest
-                color: root.notice !== "" ? Appearance.colors.colPrimary : root.store.actError !== "" ? "#ef5350" : Appearance.colors.colSubtext
+                color: isError ? "#ef5350" : root.notice !== "" ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
             }
         }
 
-        // Right-click menu for a list row (overlay inside the card)
+        // Right-click menu for a gist row (overlay inside the card)
         MouseArea {
             anchors.fill: parent
             visible: root.menuGist !== null
@@ -863,7 +1001,7 @@ Scope {
                         { icon: "link", label: Translation.tr("Copy link"), act: "link" },
                         { icon: "content_copy", label: Translation.tr("Copy content"), act: "copy" },
                         { icon: "open_in_new", label: Translation.tr("Open on GitHub"), act: "web" },
-                        { icon: "edit", label: Translation.tr("Edit"), act: "edit" },
+                        { icon: "edit", label: root.menuGist && root.store.drafts[root.menuGist.id] ? Translation.tr("Continue draft") : Translation.tr("Edit"), act: "edit" },
                         { icon: "delete", label: Translation.tr("Delete…"), act: "delete", danger: true },
                     ]
                     delegate: RippleButton {
@@ -880,7 +1018,7 @@ Scope {
                             if (modelData.act === "link") root.copy(g.html_url, Translation.tr("Link copied"));
                             else if (modelData.act === "copy") root.copy(root.allContent(g), Translation.tr("Content copied"));
                             else if (modelData.act === "web") Qt.openUrlExternally(g.html_url);
-                            else if (modelData.act === "edit") { root.openGist(g.id); root.startEdit(); }
+                            else if (modelData.act === "edit") root.startEdit(g);
                             else { root.openGist(g.id); root.confirmDelete = true; }
                         }
                         contentItem: RowLayout {

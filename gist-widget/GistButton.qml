@@ -8,15 +8,14 @@ import qs.modules.common.widgets
 
 // Bar button for the Gist widget: your GitHub gists (gh) mirrored in a local cache by gist-widget.sh.
 // Syncs in the background every 5 minutes and whenever the popup opens (loader line under the icon while it runs).
-// An unsaved create/edit draft is autosaved locally (never to GitHub) and restored after a shell restart; a dot marks it.
+// Unsaved create/edit drafts are kept locally (never sent to GitHub before Save) and survive restarts; a dot marks them.
 // Left click = popup (list/filter, view, create, edit), right click = menu (new, secret gist from clipboard, sync, open GitHub).
 RippleButton {
     id: root
     property real buttonPadding: 5
     property bool open: false
     property bool menuOpen: menu.visible
-    readonly property bool hasDraft: draftMode !== "" && draftDirty
-    readonly property bool pinned: open || menuOpen || hasDraft   // keeps the icon shown in the sliding bar row (zbar-reveal)
+    readonly property bool pinned: open || menuOpen || draftCount > 0 || changed   // keeps the icon shown in the sliding bar row (zbar-reveal)
     property var gists: []                 // index.json: [{id, description, public, html_url, created_at, updated_at, files: [{filename, language, size, content, truncated, clipped}]}]
     property bool syncing: syncProc.running
     property string lastSync: ""           // ISO time of the last successful sync
@@ -24,56 +23,126 @@ RippleButton {
     property bool busy: actProc.running     // a create/update/delete/clip is running
     property string actError: ""
     property var _onDone: null
-    // Editor draft (GistPopup): kept here so closing the popup doesn't lose it
-    property string draftMode: ""          // "" | create | edit
+    function gistById(id) { return gists.find(g => g.id === id) ?? null }
+
+    // ---- Drafts. Creating and editing always happen in a draft; nothing goes to GitHub until Save. Drafts are keyed by
+    // gist id ("new-<time>" for a new gist), survive going back and closing the popup, and are autosaved locally 2 s after
+    // a change (~/.local/state/gist-widget/drafts-<screen>.json, 0700; one file per screen's bar), so a restart keeps them.
+    // The editor works on one draft at a time through the buffer below; a draft without changes is dropped.
+    property var drafts: ({})              // key -> {key, mode, id, base, origDesc, desc, public, removed, files: [{orig, name, content, origContent, locked}], savedAt}
+    readonly property int draftCount: Object.keys(drafts).length
+    property string activeKey: ""          // draft open in the editor ("" = editor closed)
+    property ListModel draft: ListModel {} // buffer: the open draft's files (orig = name on GitHub, "" for a new file; locked = only partly loaded)
+    property string draftMode: ""          // create | edit
     property string draftId: ""
+    property string draftBase: ""          // the gist's updated_at when editing started (Save warns if GitHub has a newer version)
+    property string origDesc: ""
     property string draftDesc: ""
     property bool draftPublic: false
-    property bool draftDirty: false
     property var removedFiles: []
-    property ListModel draft: ListModel {}
-    property string draftBase: ""          // the gist's updated_at when editing started (warns before overwriting newer changes)
-    property string draftSavedAt: ""       // last local autosave
-    property bool draftRestored: false     // restored from disk; the popup says so once
+    property int draftTick: 0              // bumps on every change so `changed` re-evaluates
+    readonly property bool changed: { draftTick; return activeKey !== "" && bufferChanged() }
+    readonly property string savedAt: drafts[activeKey]?.savedAt ?? ""
 
-    // Local draft autosave: 2 s after the last change, to ~/.local/state/gist-widget (0700), one file per screen's bar.
-    // Never calls GitHub; the file is removed when the draft is saved or discarded.
-    readonly property string stateDir: `${Quickshell.env("HOME")}/.local/state/gist-widget`
-    readonly property string screenKey: root.QsWindow.window?.screen?.name ?? ""
-    function touchDraft() { draftDirty = true; draftTimer.restart() }
-    function clearSavedDraft() {
-        draftTimer.stop(); draftSavedAt = "";
-        if (draftFile.path !== "") Quickshell.execDetached(["rm", "-f", draftFile.path]);
+    function bufferChanged() {
+        if (draftMode === "create") {
+            if (draftDesc.trim() !== "") return true;
+            for (let i = 0; i < draft.count; i++) { const d = draft.get(i); if (d.name.trim() !== "" || d.content.trim() !== "") return true; }
+            return false;
+        }
+        if (draftDesc !== origDesc || removedFiles.length > 0) return true;
+        for (let i = 0; i < draft.count; i++) {
+            const d = draft.get(i);
+            if (d.orig === "" || d.name !== d.orig || (!d.locked && d.content !== d.origContent)) return true;
+        }
+        return false;
     }
-    function writeDraft() {
-        if (draftMode === "" || !draftDirty || draftFile.path === "") return;
+    function loadBuffer(d) {
+        draft.clear();
+        for (const f of d.files ?? []) draft.append({ orig: f.orig ?? "", name: f.name ?? "", content: f.content ?? "", origContent: f.origContent ?? "", locked: !!f.locked });
+        draftMode = d.mode; draftId = d.id ?? ""; draftBase = d.base ?? ""; origDesc = d.origDesc ?? ""; draftDesc = d.desc ?? "";
+        draftPublic = !!d.public; removedFiles = d.removed ?? []; activeKey = d.key; draftTick++;
+    }
+    function bufferObject() {
         const files = [];
         for (let i = 0; i < draft.count; i++) {
             const d = draft.get(i);
-            files.push({ orig: d.orig, name: d.name, content: d.content, locked: d.locked });
+            files.push({ orig: d.orig, name: d.name, content: d.content, origContent: d.origContent, locked: d.locked });
         }
-        draftSavedAt = new Date().toISOString();
-        draftFile.setText(JSON.stringify({ version: 1, mode: draftMode, id: draftId, base: draftBase, desc: draftDesc,
-            public: draftPublic, removed: removedFiles, files: files, savedAt: draftSavedAt }));
+        return { key: activeKey, mode: draftMode, id: draftId, base: draftBase, origDesc: origDesc, desc: draftDesc,
+                 public: draftPublic, removed: removedFiles, files: files };
     }
-    Timer { id: draftTimer; interval: 2000; onTriggered: root.writeDraft() }
+    function beginCreate() {
+        stash();
+        loadBuffer({ key: `new-${Date.now()}`, mode: "create", files: [{ orig: "", name: "", content: "", origContent: "", locked: false }] });
+    }
+    function beginEdit(g) {   // continues the gist's draft if it has one
+        stash();
+        if (drafts[g.id]) { loadBuffer(drafts[g.id]); return; }
+        loadBuffer({ key: g.id, mode: "edit", id: g.id, base: g.updated_at, origDesc: g.description, desc: g.description, public: g.public,
+                     files: g.files.map(f => ({ orig: f.filename, name: f.filename, content: f.content, origContent: f.content, locked: f.truncated || f.clipped })) });
+    }
+    function openDraft(key) { if (drafts[key]) { stash(); loadBuffer(drafts[key]); } }
+    function touchDraft() { draftTick++; stashTimer.restart() }
+    // buffer -> drafts (dropped when it has no changes) -> disk
+    function stash() {
+        stashTimer.stop();
+        if (activeKey === "") return;
+        const m = Object.assign({}, drafts);
+        if (bufferChanged()) m[activeKey] = Object.assign(bufferObject(), { savedAt: new Date().toISOString() });
+        else delete m[activeKey];
+        drafts = m; persist();
+    }
+    function closeEditor() { stash(); activeKey = ""; draft.clear(); }
+    function discardDraft(key) {
+        const m = Object.assign({}, drafts); delete m[key]; drafts = m; persist();
+        if (key === activeKey) { stashTimer.stop(); activeKey = ""; draft.clear(); }
+    }
+    // After a successful save the buffer becomes the new baseline; the editor stays open on the saved gist.
+    function rebase(id, updatedAt) {
+        const m = Object.assign({}, drafts); delete m[activeKey]; drafts = m; persist();
+        for (let i = 0; i < draft.count; i++) { const d = draft.get(i); draft.set(i, { orig: d.name, origContent: d.content }); }
+        draftMode = "edit"; draftId = id; draftBase = updatedAt; origDesc = draftDesc; removedFiles = []; activeKey = id; draftTick++;
+    }
+    // Publish the open draft (payload built by the popup) / delete a gist. The bookkeeping runs here, not in the popup, so it
+    // completes even if the popup is closed before GitHub answers; onDone(ok, id) is only for the popup's own feedback.
+    function publish(args, payload, onDone) {
+        const key = activeKey;
+        return run(args, payload, (ok, out) => {
+            const [id, url, updated] = ok ? out.split("\n").pop().split(" ") : ["", "", ""];
+            if (ok) {
+                if (activeKey === key) rebase(id, updated); else discardDraft(key);
+                if (args[0] === "create") Quickshell.clipboardText = url;
+            }
+            if (onDone) { try { onDone(ok, id); } catch (e) {} }   // the popup may be gone by now
+        });
+    }
+    function removeGist(id, onDone) {
+        return run(["delete", id], "", ok => {
+            if (ok && drafts[id]) discardDraft(id);
+            if (onDone) { try { onDone(ok); } catch (e) {} }
+        });
+    }
+    function persist() { if (draftFile.path !== "") draftFile.setText(JSON.stringify({ version: 2, drafts: drafts })) }
+    Timer { id: stashTimer; interval: 2000; onTriggered: root.stash() }
+
+    readonly property string stateDir: `${Quickshell.env("HOME")}/.local/state/gist-widget`
+    readonly property string screenKey: root.QsWindow.window?.screen?.name ?? ""
+    property bool draftsLoaded: false
     FileView {
         id: draftFile
-        path: root.screenKey !== "" ? `${root.stateDir}/draft-${root.screenKey}.json` : ""
+        path: root.screenKey !== "" ? `${root.stateDir}/drafts-${root.screenKey}.json` : ""
         atomicWrites: true
         printErrors: false
         onLoaded: {
-            if (root.draftMode !== "") return;   // never replace a draft that is already in memory
+            if (root.draftsLoaded) return;   // only the first read; later writes are ours
+            root.draftsLoaded = true;
             try {
                 const j = JSON.parse(text());
-                if (j.version !== 1 || !["create", "edit"].includes(j.mode) || !Array.isArray(j.files)) return;
-                root.draft.clear();
-                for (const f of j.files) root.draft.append({ orig: f.orig ?? "", name: f.name ?? "", content: f.content ?? "", locked: !!f.locked });
-                root.draftId = j.id ?? ""; root.draftBase = j.base ?? ""; root.draftDesc = j.desc ?? "";
-                root.draftPublic = !!j.public; root.removedFiles = j.removed ?? []; root.draftSavedAt = j.savedAt ?? "";
-                root.draftDirty = true; root.draftMode = j.mode; root.draftRestored = true;
+                if (j.version === 2 && j.drafts && typeof j.drafts === "object") root.drafts = Object.assign({}, j.drafts, root.drafts);
             } catch (e) {}
         }
+        onLoadFailed: root.draftsLoaded = true
     }
     Component.onCompleted: Quickshell.execDetached(["mkdir", "-p", "-m", "700", stateDir])
     readonly property string script: `${Quickshell.env("HOME")}/.config/hypr/custom/gist-widget.sh`
@@ -151,8 +220,8 @@ RippleButton {
         iconSize: 21
         color: root.syncError !== "" ? Appearance.colors.colSubtext : Appearance.colors.colOnLayer0
     }
-    Rectangle {  // unsaved draft: small dot top-right, like the mail/Teams badges
-        visible: root.hasDraft
+    Rectangle {  // unsaved drafts: small dot top-right, like the mail/Teams badges
+        visible: root.draftCount > 0 || root.changed
         anchors { top: parent.top; right: parent.right; topMargin: 4; rightMargin: 3 }
         implicitWidth: 8; implicitHeight: 8; radius: 4
         color: Appearance.colors.colPrimary
@@ -244,6 +313,7 @@ RippleButton {
         sourceComponent: GistPopup {
             target: root
             store: root
+            screen: root.QsWindow.window?.screen ?? null
             onVisibleChanged: if (!visible) root.open = false
         }
     }
