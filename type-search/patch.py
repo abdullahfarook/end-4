@@ -20,13 +20,13 @@ if 'typedOpen' not in s:
             GlobalStates.overviewOpen = true;
         }""", 1)
     s = s.replace('        property string searchingText: ""\n', '        property string searchingText: ""\n        property bool typedOpen: false\n', 1)
-    s = s.replace('item: GlobalStates.overviewOpen ? columnLayout : null', 'item: GlobalStates.overviewOpen ? (panelWindow.typedOpen ? scrim : columnLayout) : null', 1)
+    s = s.replace('item: GlobalStates.overviewOpen ? columnLayout : null', 'item: GlobalStates.overviewOpen ? scrim : null', 1)
     s = s.replace('                if (!GlobalStates.overviewOpen) {\n', '                if (!GlobalStates.overviewOpen) {\n                    panelWindow.typedOpen = false;\n', 1)
-    s = s.replace('        Column {\n            id: columnLayout', """        // click-outside closes when opened by type-search (the focus grab is unreliable there)
+    s = s.replace('        Column {\n            id: columnLayout', """        // click-outside always closes the overview (the focus grab is unreliable)
         MouseArea {
             id: scrim
             anchors.fill: parent
-            enabled: panelWindow.typedOpen && GlobalStates.overviewOpen
+            enabled: GlobalStates.overviewOpen
             onPressed: GlobalStates.overviewOpen = false
         }
 
