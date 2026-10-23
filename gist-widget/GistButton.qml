@@ -215,10 +215,12 @@ RippleButton {
         }
     }
 
-    MaterialSymbol {
+    CustomIcon {  // GitHub mark, sized to match the neighbouring glyph icons
         anchors.centerIn: parent
-        text: "note_stack"
-        iconSize: 21
+        width: 16
+        height: 16
+        source: "github-symbolic"
+        colorize: true
         color: root.syncError !== "" ? Appearance.colors.colSubtext : Appearance.colors.colOnLayer0
     }
     Item {  // indeterminate loader line below the icon while syncing (same as the Mail/Teams buttons)

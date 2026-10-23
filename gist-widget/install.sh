@@ -14,6 +14,7 @@ for f in GistButton.qml GistPopup.qml; do
   install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
 install -Dm755 "$REPO/gist-widget.sh" "$SCRIPT"
+install -Dm644 "$REPO/icons/github-symbolic.svg" "$Q/assets/icons/github-symbolic.svg"
 python3 - "$BAR" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
