@@ -8,7 +8,7 @@ import qs.modules.common.widgets
 
 // Bar button for the Gist widget: your GitHub gists (gh) mirrored in a local cache by gist-widget.sh.
 // Syncs in the background every 5 minutes and whenever the popup opens (loader line under the icon while it runs).
-// Unsaved create/edit drafts are kept locally (never sent to GitHub before Save) and survive restarts; a dot marks them.
+// Unsaved create/edit drafts are kept locally (never sent to GitHub before Save) and survive restarts.
 // Left click = popup (list/filter, view, create, edit), right click = menu (new, secret gist from clipboard, sync, open GitHub).
 RippleButton {
     id: root
@@ -216,15 +216,9 @@ RippleButton {
 
     MaterialSymbol {
         anchors.centerIn: parent
-        text: "data_object"
+        text: "note_stack"
         iconSize: 21
         color: root.syncError !== "" ? Appearance.colors.colSubtext : Appearance.colors.colOnLayer0
-    }
-    Rectangle {  // unsaved drafts: small dot top-right, like the mail/Teams badges
-        visible: root.draftCount > 0 || root.changed
-        anchors { top: parent.top; right: parent.right; topMargin: 4; rightMargin: 3 }
-        implicitWidth: 8; implicitHeight: 8; radius: 4
-        color: Appearance.colors.colPrimary
     }
     Item {  // indeterminate loader line below the icon while syncing (same as the Mail/Teams buttons)
         id: loader

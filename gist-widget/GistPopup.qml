@@ -66,6 +66,47 @@ Scope {
         if (s < 86400 * 30) return `${Math.floor(s / 86400)} d ago`;
         return new Date(iso).toLocaleDateString(Qt.locale(), Locale.ShortFormat);
     }
+    // GitHub-style inline diff (line LCS): [{t: " " | "+" | "-", s}]. Very large files fall back to "all removed, all added".
+    function diffLines(a, b) {
+        const A = a === "" ? [] : a.split("\n"), B = b === "" ? [] : b.split("\n");
+        let p = 0; while (p < A.length && p < B.length && A[p] === B[p]) p++;
+        let q = 0; while (q < A.length - p && q < B.length - p && A[A.length - 1 - q] === B[B.length - 1 - q]) q++;
+        const a2 = A.slice(p, A.length - q), b2 = B.slice(p, B.length - q), n = a2.length, m = b2.length, mid = [];
+        if (n * m > 4000000) { for (const s of a2) mid.push({ t: "-", s }); for (const s of b2) mid.push({ t: "+", s }); }
+        else {
+            const L = []; for (let i = 0; i <= n; i++) L.push(new Int32Array(m + 1));
+            for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a2[i] === b2[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+            let i = 0, j = 0;
+            while (i < n && j < m) {
+                if (a2[i] === b2[j]) { mid.push({ t: " ", s: a2[i] }); i++; j++; }
+                else if (L[i + 1][j] >= L[i][j + 1]) mid.push({ t: "-", s: a2[i++] });
+                else mid.push({ t: "+", s: b2[j++] });
+            }
+            while (i < n) mid.push({ t: "-", s: a2[i++] }); while (j < m) mid.push({ t: "+", s: b2[j++] });
+        }
+        // keep 3 lines of context around changes, like GitHub
+        const all = A.slice(0, p).map(s => ({ t: " ", s })).concat(mid, A.slice(A.length - q).map(s => ({ t: " ", s })));
+        const keep = all.map(() => false);
+        all.forEach((l, k) => { if (l.t !== " ") for (let x = Math.max(0, k - 3); x <= Math.min(all.length - 1, k + 3); x++) keep[x] = true; });
+        const out = []; let gap = false;
+        all.forEach((l, k) => { if (keep[k]) { out.push(l); gap = false; } else if (!gap) { out.push({ t: "@", s: "⋯" }); gap = true; } });
+        return out;
+    }
+    // per file of a draft vs the GitHub version: [{name, status: added|removed|renamed|modified, lines}]
+    function draftDiff(d, g) {
+        const out = [];
+        if (!d || !g) return out;
+        if ((d.desc ?? "") !== g.description) out.push({ name: Translation.tr("Description"), status: "modified", lines: diffLines(g.description, d.desc) });
+        for (const f of d.files) {
+            const o = g.files.find(x => x.filename === f.orig);
+            if (!o) { out.push({ name: f.name, status: "added", lines: diffLines("", f.content) }); continue; }
+            const renamed = f.name !== f.orig, changed = !f.locked && f.content !== o.content;
+            if (!renamed && !changed) continue;
+            out.push({ name: renamed ? `${f.orig} → ${f.name}` : f.name, status: renamed && !changed ? "renamed" : "modified", lines: changed ? diffLines(o.content, f.content) : [] });
+        }
+        for (const r of d.removed ?? []) { const o = g.files.find(x => x.filename === r); out.push({ name: r, status: "removed", lines: diffLines(o?.content ?? "", "") }); }
+        return out;
+    }
     function fmtSize(b) { return b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : b >= 1024 ? (b / 1024).toFixed(1) + " KB" : b + " B" }
     function allContent(g) { return g.files.length === 1 ? g.files[0].content : g.files.map(f => `// ${f.filename}\n${f.content}`).join("\n\n") }
     function flash(text) { notice = text; noticeTimer.restart() }
@@ -131,18 +172,17 @@ Scope {
     function openDraft(key) { store.openDraft(key); selectedId = store.draftId; enterEditor() }
     // Back from the editor keeps any changes as a draft (marked in the list); only Discard throws them away.
     function leaveEditor() {
-        const key = store.activeKey, wasEdit = store.draftMode === "edit";
+        const key = store.activeKey;
         store.closeEditor();
         if (store.drafts[key]) flash(Translation.tr("Kept as a draft"));
-        if (wasEdit && current) openGist(selectedId); else toList();
+        toList();
     }
     function discard(key) {
         const wasOpen = mode === "editor" && key === store.activeKey;
-        const wasEdit = wasOpen ? store.draftMode === "edit" : store.drafts[key]?.mode === "edit";
         store.discardDraft(key);
         confirmDiscardKey = "";
         flash(Translation.tr("Draft discarded"));
-        if (wasOpen) { if (wasEdit && current) openGist(selectedId); else toList(); }
+        if (wasOpen) toList();
     }
     function back() {
         if (menuGist) { menuGist = null; return; }
@@ -398,7 +438,7 @@ Scope {
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:sidebarLeft"  // same Hyprland layer rule (slide left) as the left sidebar
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive  // focused from the start: a click shows the text cursor at once (OnDemand waited for the compositor)
         Component.onCompleted: if (root.mode === "list") filterInput.forceActiveFocus()
         StyledRectangularShadow { target: card }
 
@@ -443,7 +483,7 @@ Scope {
                     enabled: !(root.mode === "editor" && root.store.busy)
                     onClicked: root.back()
                 }
-                MaterialSymbol { visible: root.mode === "list"; text: "data_object"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colOnLayer2 }
+                MaterialSymbol { visible: root.mode === "list"; text: "note_stack"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colOnLayer2 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
@@ -500,7 +540,7 @@ Scope {
                 IconBtn { visible: root.mode === "editor"; symbol: "note_add"; tip: Translation.tr("Add file"); onClicked: root.addFile() }
                 IconBtn {
                     visible: root.mode === "editor" && (root.store.changed || !!root.store.drafts[root.store.activeKey])
-                    symbol: "delete_sweep"
+                    symbol: "delete"
                     tip: root.store.draftMode === "create" ? Translation.tr("Discard draft") : Translation.tr("Discard changes")
                     iconColor: Appearance.colors.colSubtext
                     onClicked: root.confirmDiscardKey = root.store.activeKey
@@ -598,7 +638,7 @@ Scope {
                 Chip { label: Translation.tr("Secret"); active: root.visibility === "secret"; onClicked: root.visibility = "secret" }
                 Chip {
                     visible: root.store.draftCount > 0 || root.visibility === "drafts"
-                    label: `${Translation.tr("Drafts")} ${root.store.draftCount}`
+                    label: Translation.tr("Drafts")
                     active: root.visibility === "drafts"
                     onClicked: root.visibility = "drafts"
                 }
@@ -711,7 +751,7 @@ Scope {
                         }
                         IconBtn {
                             Layout.alignment: Qt.AlignVCenter
-                            symbol: rowBtn.isDraft ? "delete_sweep" : "content_copy"
+                            symbol: rowBtn.isDraft ? "delete" : "content_copy"
                             tip: rowBtn.isDraft ? Translation.tr("Discard draft") : Translation.tr("Copy content")
                             iconColor: Appearance.colors.colSubtext
                             onClicked: {
@@ -729,7 +769,7 @@ Scope {
                     spacing: 10
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignHCenter
-                        text: root.store.gists.length === 0 && root.store.syncing ? "sync" : root.store.gists.length === 0 ? "data_object" : "search_off"
+                        text: root.store.gists.length === 0 && root.store.syncing ? "sync" : root.store.gists.length === 0 ? "note_stack" : "search_off"
                         iconSize: 48
                         color: Appearance.colors.colSubtext
                     }
@@ -764,7 +804,7 @@ Scope {
                     StyledText {
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
-                        text: Translation.tr("You have unsaved changes to this gist (%1). Below is the GitHub version.").arg(root.ago(viewDraft.d?.savedAt ?? ""))
+                        text: Translation.tr("Unsaved changes (%1), compared with GitHub below.").arg(root.ago(viewDraft.d?.savedAt ?? ""))
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colOnTertiaryContainer
                     }
@@ -772,9 +812,70 @@ Scope {
                     Chip { label: Translation.tr("Continue"); active: true; onClicked: root.startEdit(root.current) }
                 }
             }
+            StyledListView {  // draft vs GitHub, inline diff
+                id: diffList
+                visible: root.mode === "view" && viewDraft.d !== null
+                animateAppearance: false
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 12
+                model: visible ? root.draftDiff(viewDraft.d, root.current) : []
+                boundsBehavior: Flickable.StopAtBounds
+                delegate: ColumnLayout {
+                    id: dItem
+                    required property var modelData
+                    width: diffList.width
+                    spacing: 4
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        MaterialSymbol { text: "description"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colSubtext }
+                        StyledText { Layout.fillWidth: true; text: dItem.modelData.name; font.family: Appearance.font.family.monospace; font.weight: Font.Medium; elide: Text.ElideMiddle; color: Appearance.colors.colOnLayer2 }
+                        StyledText {
+                            text: dItem.modelData.status === "added" ? Translation.tr("new file") : dItem.modelData.status === "removed" ? Translation.tr("deleted")
+                                : dItem.modelData.status === "renamed" ? Translation.tr("renamed") : `+${dItem.modelData.lines.filter(l => l.t === "+").length} −${dItem.modelData.lines.filter(l => l.t === "-").length}`
+                            font.pixelSize: Appearance.font.pixelSize.smaller; font.family: Appearance.font.family.monospace
+                            color: dItem.modelData.status === "removed" ? "#ef5350" : "#4caf50"
+                        }
+                    }
+                    Rectangle {
+                        visible: dItem.modelData.lines.length > 0
+                        Layout.fillWidth: true
+                        implicitHeight: dCol.implicitHeight + 8
+                        radius: Appearance.rounding.small
+                        color: Appearance.colors.colLayer0
+                        clip: true
+                        Column {
+                            id: dCol
+                            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 4 }
+                            Repeater {
+                                model: dItem.modelData.lines
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: dCol.width
+                                    implicitHeight: lineText.implicitHeight + 2
+                                    color: modelData.t === "+" ? Qt.rgba(0.18, 0.63, 0.26, 0.22) : modelData.t === "-" ? Qt.rgba(0.85, 0.2, 0.2, 0.22)
+                                         : modelData.t === "@" ? Appearance.colors.colLayer1 : "transparent"
+                                    Text {
+                                        id: lineText
+                                        anchors { left: parent.left; right: parent.right; leftMargin: 6; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                                        text: (parent.modelData.t === "@" ? "" : parent.modelData.t + " ") + parent.modelData.s
+                                        wrapMode: Text.WrapAnywhere
+                                        textFormat: Text.PlainText
+                                        font.family: Appearance.font.family.monospace
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: parent.modelData.t === "@" ? Appearance.colors.colSubtext : Appearance.colors.colOnLayer0
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             StyledListView {
                 id: fileList
-                visible: root.mode === "view"
+                visible: root.mode === "view" && viewDraft.d === null
                 animateAppearance: false
                 Layout.fillWidth: true
                 Layout.fillHeight: true
