@@ -438,7 +438,7 @@ Scope {
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:sidebarLeft"  // same Hyprland layer rule (slide left) as the left sidebar
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive  // focused from the start: a click shows the text cursor at once (OnDemand waited for the compositor)
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         Component.onCompleted: if (root.mode === "list") filterInput.forceActiveFocus()
         StyledRectangularShadow { target: card }
 
