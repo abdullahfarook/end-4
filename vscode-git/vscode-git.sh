@@ -12,16 +12,12 @@ if hyprctl clients -j | jq -e '.[] | select(.title|test("⎇"))' >/dev/null; the
     hyprctl dispatch 'hl.dsp.workspace.toggle_special("vgit")' >/dev/null
 else
     # Keep the Source Control Graph (commit log) view hidden: it is a saved view state, applied while VS Code is not running.
-    python3 - "$D/User/globalStorage/state.vscdb" <<'PY' 2>/dev/null
-import json, sqlite3, sys
-db = sqlite3.connect(sys.argv[1]); k = "workbench.scm.views.state.hidden"
-row = db.execute("select value from ItemTable where key=?", (k,)).fetchone()
-views = json.loads(row[0]) if row else []
-for v in views:
-    if v["id"] == "workbench.scm.history": v["isHidden"] = True; break
-else: views.append({"id": "workbench.scm.history", "isHidden": True})
-db.execute("insert or replace into ItemTable(key, value) values(?, ?)", (k, json.dumps(views))); db.commit()
-PY
+    scm="$D/User/globalStorage/state.vscdb"; k="workbench.scm.views.state.hidden"
+    if [ -f "$scm" ]; then
+        views=$(sqlite3 "$scm" "select value from ItemTable where key='$k'" 2>/dev/null); : "${views:=[]}"
+        views=$(jq -c 'if any(.[]; .id == "workbench.scm.history") then (first(.[] | select(.id == "workbench.scm.history")) | .isHidden = true) as $h | map(if .id == "workbench.scm.history" then $h else . end) else . + [{id: "workbench.scm.history", isHidden: true}] end' <<<"$views" 2>/dev/null) \
+            && sqlite3 "$scm" "insert or replace into ItemTable(key, value) values('$k', '${views//\'/\'\'}')" 2>/dev/null
+    fi
     # Start from a known layout (editor area visible, bottom panel hidden): the extension hides the editor area itself.
     for db in "$D"/User/workspaceStorage/*/state.vscdb; do
         sqlite3 "$db" "update ItemTable set value='false' where key='workbench.editor.hidden'; update ItemTable set value='true' where key='workbench.panel.hidden'" 2>/dev/null
