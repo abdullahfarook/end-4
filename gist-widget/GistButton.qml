@@ -7,7 +7,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 // Bar button for the Gist widget: your GitHub gists (gh) mirrored in a local cache by gist-widget.sh.
-// Syncs in the background every 5 minutes and whenever the popup opens (loader line under the icon while it runs).
+// Syncs in the background every 30 minutes and on open if the last sync is older than 5 minutes (loader line under the icon while it runs).
 // Unsaved create/edit drafts are kept locally (never sent to GitHub before Save) and survive restarts.
 // Left click = popup (list/filter, view, create, edit), right click = menu (new, secret gist from clipboard, sync, open GitHub).
 RippleButton {
@@ -154,7 +154,8 @@ RippleButton {
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
     onClicked: open = !open
-    onOpenChanged: if (open) sync()
+    // on open only when the last sync is over 5 min old; the button below syncs any time
+    onOpenChanged: if (open && (!lastSync || Date.now() - Date.parse(lastSync) > 300000)) sync()
 
     function sync() { if (!syncProc.running) syncProc.running = true }
     // Run a mutation (create/update ID/delete ID/clip); payload goes to the script's stdin. onDone(ok, stdout) afterwards.
@@ -191,8 +192,8 @@ RippleButton {
             indexFile.reload();   // the file may not have existed when the FileView started watching
         }
     }
-    Timer { interval: 300000; repeat: true; running: true; onTriggered: root.sync() }
-    Timer { interval: 8000; running: true; onTriggered: root.sync() }   // first sync shortly after the shell starts
+    Timer { interval: 1800000; repeat: true; running: true; onTriggered: root.sync() }   // background sync every 30 min
+    Timer { interval: 60000; running: true; onTriggered: root.sync() }   // first sync a minute after the shell starts
 
     Process {
         id: actProc
