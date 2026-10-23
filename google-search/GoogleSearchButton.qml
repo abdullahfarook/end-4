@@ -35,7 +35,7 @@ RippleButton {
 
     MaterialSymbol {
         anchors.centerIn: parent
-        text: "travel_explore"
+        text: "public"
         iconSize: 18
         color: Appearance.colors.colOnLayer0
     }
