@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Left bar: only the AI button is always visible; the other buttons slide out of it inside the bar when the pointer is on the left side of the bar (icons or title).
 # Right side: the clock date and util buttons reveal with the same Revealer animation (patch-right.py).
-# Buttons with an unread count (Mail, Teams) stay visible until the count is 0; Docker likewise while containers are running. Run AFTER the other bar installers (patches BarContent.qml; idempotent).
+# Buttons with an unread count (Mail, Teams) stay visible until the count is 0; Docker likewise while containers are running.
+# GistButton (gist-widget) is optional: wrapped when present. Run AFTER the other bar installers (patches BarContent.qml; idempotent).
 set -euo pipefail
 Q="$HOME/.config/quickshell/ii/modules/ii/bar"; BAR="$Q/BarContent.qml"
 B="$HOME/backups/zbar-reveal/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$BAR" "$Q/ClockWidget.qml" "$Q/UtilButtons.qml" "$B/"
@@ -12,12 +13,15 @@ p = sys.argv[1]; s = open(p).read()
 if "RevealSlot" in s: sys.exit(0)
 pins = {"MailButton": ("mailBtn", "mailBtn.newTotal > 0 || mailBtn.popupOpen"), "TeamsButton": ("teamsBtn", "teamsBtn.unread > 0"),
         "FileSearchButton": ("fileBtn", "fileBtn.open"), "DockerButton": ("dockerBtn", "dockerBtn.open || (dockerBtn.available && dockerBtn.running > 0)"),
-        "TaskManagerButton": ("taskBtn", "taskBtn.open"), "GoogleSearchButton": ("googleBtn", "googleBtn.open")}
-names = ["VscodeGitButton", "ConsoleButton", "MailButton", "TeamsButton", "FileSearchButton", "DockerButton", "TaskManagerButton", "GoogleSearchButton"]
+        "TaskManagerButton": ("taskBtn", "taskBtn.open"), "GoogleSearchButton": ("googleBtn", "googleBtn.open"),
+        "GistButton": ("gistBtn", "gistBtn.pinned")}
+names = ["VscodeGitButton", "ConsoleButton", "MailButton", "TeamsButton", "FileSearchButton", "DockerButton", "TaskManagerButton", "GoogleSearchButton", "GistButton"]
+optional = {"GistButton"}   # only wrapped when its own installer ran first
 def block(n):
     m = re.search(r"^( *)" + n + r" \{[^\n]*\n.*?^\1\}\n", s, re.S | re.M)
-    if not m: sys.exit(n + " not found")
+    if not m and n not in optional: sys.exit(n + " not found")
     return m
+names = [n for n in names if n not in optional or block(n)]
 for n in names:
     m = block(n); ind = m.group(1); body = m.group(0)
     lines = body.rstrip("\n").split("\n")
@@ -25,7 +29,7 @@ for n in names:
     inner = "\n".join("    " + l if l else l for l in lines)
     pin = f"{ind}    pinned: {pins[n][1]}\n" if n in pins else ""
     s = s[:m.start()] + f"{ind}RevealSlot {{\n{ind}    open: iconRow.hot\n{pin}{inner}\n{ind}}}\n" + s[m.end():]
-a = block("LeftSidebarButton"); last = re.search(r"^( *)RevealSlot \{\n(?:(?!^\1RevealSlot).)*?GoogleSearchButton \{.*?^\1\}\n", s, re.S | re.M)
+a = block("LeftSidebarButton"); last = re.search(r"^( *)RevealSlot \{\n(?:(?!^\1RevealSlot).)*?" + names[-1] + r" \{.*?^\1\}\n", s, re.S | re.M)
 start, end = a.start(), last.end()
 ind = a.group(1)
 chunk = s[start:end]
