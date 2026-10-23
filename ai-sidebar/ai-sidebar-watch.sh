@@ -44,5 +44,8 @@ socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     sleep 0.05  # let the open/focus sequence settle before deciding
     cur=$(hyprctl activewindow -j | jq -r 'select(.workspace.name != "special:ai") | .class // empty')  # windows on the panel's own workspace don't count as "outside"
     [ -z "$cur" ] || [ "$cur" = ai-sidebar ] && continue
+    # focus moved to a window on another monitor: the panel stays open on its own monitor
+    pmon=$(hyprctl monitors -j | jq -r '.[] | select(.specialWorkspace.name == "special:ai") | .id' | head -1)
+    [ -n "$pmon" ] && [ "$(hyprctl activewindow -j | jq -r '.monitor')" != "$pmon" ] && continue
     "$HOME/.config/hypr/custom/ai-sidebar-hide.sh"
 done

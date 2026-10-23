@@ -124,13 +124,21 @@ Scope {
     // Clicks on the bar pass through the click-away layer (it covers everything below the bar), so one click on another bar
     // button both reaches that button and closes this popup: close when something else opens (a popup or the sidebar
     // layer, the AI panel's special workspace, another workspace).
+    property real lastMonSwitch: 0
+    property string popupMon: ""   // monitor the popup was opened on (frozen at open)
+    QtObject { Component.onCompleted: root.popupMon = Hyprland.focusedMonitor?.name ?? "" }
+    Timer { id: wsCheck; interval: 200; onTriggered: if (Date.now() - lastMonSwitch > 500 && Hyprland.focusedMonitor?.name === popupMon) root.visible = false }
     Connections {
         target: Hyprland
         enabled: true
         function onRawEvent(event) {
             if (Date.now() - root.openedAt < 600) return;   // our own layers opening
-            if (["activespecial", "workspacev2"].includes(event.name)
-                || (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss")) root.visible = false
+            // moving to another monitor also reports that monitor's workspace: not a reason to close
+            if (event.name === "focusedmon" || event.name === "focusedmonv2") { lastMonSwitch = Date.now(); return; }
+            // Only things happening on this popup's own monitor close it (opening the AI panel or clicking on the other monitor must not)
+            if (event.name === "activespecial") { const q = event.data.split(","); if (q[0] !== "" && q[1] === popupMon) root.visible = false; return; }
+            if (event.name === "workspacev2") { wsCheck.restart(); return; }   // decided once a monitor switch had time to show up
+            if (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss" && Hyprland.focusedMonitor?.name === popupMon) root.visible = false
         }
     }
 
