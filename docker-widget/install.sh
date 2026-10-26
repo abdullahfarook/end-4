@@ -5,10 +5,12 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/docker-widget/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$BAR" "$BACKUP/"
+"$REPO/../widget-base/install.sh"   # shared panel behavior (WidgetBase.qml)
 for f in DockerButton.qml DockerPopup.qml; do
   [ -f "$Q/modules/ii/bar/$f" ] && cp "$Q/modules/ii/bar/$f" "$BACKUP/"
-  install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
+install -Dm644 "$REPO/DockerButton.qml" "$Q/modules/ii/bar/DockerButton.qml"
+rm -f "$Q/modules/ii/bar/DockerPopup.qml"   # merged into DockerButton.qml
 python3 - "$BAR" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()

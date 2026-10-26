@@ -13,6 +13,8 @@ import qs.modules.common.widgets
 RippleButton {
     id: root
     property string iconName: ""
+    property int iconSize: 21
+    property real iconOpacity: 1
     property bool open: false
     property Component panelContent: null
     property int panelWidth: 440
@@ -21,6 +23,47 @@ RippleButton {
     readonly property var panelScreen: root.QsWindow.window?.screen ?? null
 
     function close() { open = false }
+
+    // Right-click menu: the widget gives only its entries (menuContent); WidgetBase places the menu under the button
+    // (above it for a bottom bar), closes the panel when it opens, and closes on an outside click or closeMenu().
+    property Component menuContent: null
+    readonly property bool menuOpen: menu.visible   // keeps the bar slot revealed while the menu is open
+    function closeMenu() { menu.visible = false }
+    // with the panel open, the menu is shown once the panel is gone (its teardown would dismiss the menu's focus grab)
+    altAction: menuContent ? () => { if (open) { open = false; menuAfterPanel.restart() } else menu.visible = !menu.visible } : undefined
+    Timer { id: menuAfterPanel; interval: 250; onTriggered: menu.visible = true }
+    PopupWindow {
+        id: menu
+        visible: false
+        anchor.window: root.QsWindow.window
+        anchor.onAnchoring: {
+            const p = root.QsWindow.mapFromItem(root, 0, 0);
+            anchor.rect = Qt.rect(p.x, p.y, root.width, root.height);
+        }
+        anchor.edges: Config.options.bar.bottom ? Edges.Top : Edges.Bottom
+        anchor.gravity: anchor.edges === Edges.Top ? Edges.Top : Edges.Bottom
+        anchor.adjustment: PopupAdjustment.All
+        grabFocus: true
+        color: "transparent"
+        implicitWidth: menuCard.implicitWidth + 16
+        implicitHeight: menuCard.implicitHeight + 16
+        Rectangle {
+            id: menuCard
+            anchors.centerIn: parent
+            implicitWidth: Math.max(180, (menuEntries.item?.implicitWidth ?? 0) + 12)
+            implicitHeight: (menuEntries.item?.implicitHeight ?? 0) + 12
+            color: Appearance.m3colors.m3surfaceContainer
+            radius: Appearance.rounding.normal
+            border.width: 1
+            border.color: Appearance.colors.colLayer0Border
+            Loader {
+                id: menuEntries
+                anchors { fill: parent; margins: 6 }
+                active: menu.visible
+                sourceComponent: root.menuContent
+            }
+        }
+    }
 
     property real buttonPadding: 5
     implicitWidth: 30    // fixed size so every bar icon button is identical
@@ -33,8 +76,9 @@ RippleButton {
     MaterialSymbol {
         anchors.centerIn: parent
         text: root.iconName
-        iconSize: 21
+        iconSize: root.iconSize
         color: Appearance.colors.colOnLayer0
+        opacity: root.iconOpacity
     }
 
     Loader {
