@@ -20,6 +20,10 @@ RippleButton {
     property int panelWidth: 440
     property int panelKeyboardFocus: WlrKeyboardFocus.OnDemand
     property var ignoredLayers: []     // extra layer namespaces whose opening must not close the panel
+    // false: the content draws its own card(s) (e.g. a list + a detail pane) and lists its clickable items in
+    // `panelMaskItems`; it may also set `panelClickThrough` (a rect, screen coordinates: clicks there reach the windows
+    // below, e.g. a browser window placed next to the card) and `panelHidden` (hide the panel window for a while)
+    property bool panelCard: true
     readonly property var panelScreen: root.QsWindow.window?.screen ?? null
 
     function close() { open = false }
@@ -71,7 +75,8 @@ RippleButton {
     buttonRadius: Appearance.rounding.full
     colBackgroundHover: Appearance.colors.colLayer1Hover
     colRipple: Appearance.colors.colLayer1Active
-    onClicked: open = !open
+    property bool clickOpens: true   // false: the widget handles left click itself (e.g. opens an app instead)
+    onClicked: if (clickOpens) open = !open
 
     MaterialSymbol {
         anchors.centerIn: parent
@@ -114,15 +119,31 @@ RippleButton {
                     if (Date.now() - panel.openedAt < 600) return;   // our own layers opening
                     if (event.name === "activespecial") { const q = event.data.split(","); if (q[0] !== "" && q[1] === panel.popupMon) root.close(); return; }
                     if (event.name === "workspacev2") { wsCheck.restart(); return; }   // decided once Hyprland.monitors has updated
-                    if (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss" && !root.ignoredLayers.includes(event.data)
+                    // the window close-button overlay (closebutton config) is not a panel: never a reason to close
+                    if (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss" && event.data !== "quickshell:closebutton"
+                        && !root.ignoredLayers.includes(event.data)
                         && Hyprland.focusedMonitor?.name === panel.popupMon) root.close();
                 }
             }
 
-            // Click-away layer below the bar: a click anywhere outside the card closes the panel
+            // Click-away layer below the bar: a click anywhere outside the panel closes it (except in the content's click-through rect)
+            readonly property rect hole: content.item?.panelClickThrough ?? Qt.rect(0, 0, 0, 0)
+            readonly property bool holed: hole.width > 0 && hole.height > 0
             PanelWindow {
+                id: away
                 screen: panel.screen
-                mask: Region { item: belowBar }
+                // Item-based bands around the hole (a Subtract region is unreliable): above, left of, right of and below it
+                mask: Region {
+                    item: panel.holed ? aboveHole : belowBar
+                    Region { item: leftOfHole }
+                    Region { item: rightOfHole }
+                    Region { item: belowHole }
+                }
+                readonly property real barH: Config.options.bar.bottom ? 0 : Appearance.sizes.barHeight
+                Item { id: aboveHole; x: 0; y: away.barH; width: away.width; height: Math.max(0, panel.hole.y - away.barH) }
+                Item { id: leftOfHole; x: 0; y: panel.hole.y; width: panel.holed ? panel.hole.x : 0; height: panel.hole.height }
+                Item { id: rightOfHole; x: panel.hole.x + panel.hole.width; y: panel.hole.y; width: panel.holed ? away.width - x : 0; height: panel.hole.height }
+                Item { id: belowHole; x: 0; y: panel.hole.y + panel.hole.height; width: panel.holed ? away.width : 0; height: Math.max(0, away.height - y) }
                 color: "transparent"
                 anchors { left: true; right: true; top: true; bottom: true }
                 exclusionMode: ExclusionMode.Ignore
@@ -135,11 +156,18 @@ RippleButton {
 
             // Side panel: same geometry as the left sidebar, top/left/bottom anchored, hyprland outer gap around the card
             PanelWindow {
+                id: win
                 screen: panel.screen
+                visible: !(content.item?.panelHidden ?? false)
                 color: "transparent"
                 anchors { top: true; left: true; bottom: true }
                 implicitWidth: root.panelWidth + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin
-                mask: Region { item: card }
+                mask: Region { item: root.panelCard ? card : null; regions: maskRegions.instances }
+                Variants {   // custom layout: one input region per item the content lists
+                    id: maskRegions
+                    model: root.panelCard ? [] : (content.item?.panelMaskItems ?? [])
+                    Region { required property Item modelData; item: modelData }
+                }
                 exclusionMode: ExclusionMode.Normal
                 exclusiveZone: 0
                 WlrLayershell.namespace: "quickshell:sidebarLeft"  // same Hyprland layer rule (slide left) as the left sidebar: native slide in/out
@@ -147,9 +175,10 @@ RippleButton {
                 WlrLayershell.keyboardFocus: root.panelKeyboardFocus
                 onVisibleChanged: if (visible) content.item?.forceActiveFocus()
 
-                StyledRectangularShadow { target: card }
+                StyledRectangularShadow { target: card; visible: root.panelCard }
                 Rectangle {
                     id: card
+                    visible: root.panelCard
                     anchors { top: parent.top; left: parent.left; bottom: parent.bottom }
                     anchors.topMargin: Appearance.sizes.hyprlandGapsOut
                     anchors.leftMargin: Appearance.sizes.hyprlandGapsOut
@@ -162,6 +191,7 @@ RippleButton {
                     clip: true
                     Loader {
                         id: content
+                        parent: root.panelCard ? card : win.contentItem   // custom layout: the whole window, content draws its own cards
                         anchors.fill: parent
                         focus: true
                         sourceComponent: root.panelContent

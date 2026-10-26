@@ -6,7 +6,10 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/dankmail/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$Q/services/TrayService.qml" "$BACKUP/"
-for f in MailButton MailPopup MailRow MailMenu MailDetail; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
+"$REPO/../widget-base/install.sh"   # shared panel behavior (WidgetBase.qml)
+for f in MailButton MailPopup MailRow MailMenu MailDetail; do [ -f "$Q/modules/ii/bar/$f.qml" ] && cp "$Q/modules/ii/bar/$f.qml" "$BACKUP/"; done
+for f in MailButton MailRow MailMenu MailDetail; do install -Dm644 "$REPO/$f.qml" "$Q/modules/ii/bar/$f.qml"; done
+rm -f "$Q/modules/ii/bar/MailPopup.qml"   # merged into MailButton.qml (panelContent)
 for f in "$REPO"/icons/*.svg; do install -Dm644 "$f" "$Q/assets/icons/mail/$(basename "$f")"; done
 install -Dm644 "$REPO/viewer/mailview.qml" "$HOME/.local/share/dankmail-viewer/mailview.qml"
 install -Dm644 "$REPO/MailBody.js" "$Q/modules/ii/bar/MailBody.js"

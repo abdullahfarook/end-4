@@ -9,10 +9,12 @@ gh auth status 2>&1 | grep -q "'gist'" || echo "warning: the gh token has no 'gi
 BACKUP="$HOME/backups/gist-widget/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$BAR" "$BACKUP/"
 [ -f "$SCRIPT" ] && cp "$SCRIPT" "$BACKUP/"
+"$REPO/../widget-base/install.sh"   # shared panel behavior (WidgetBase.qml)
 for f in GistButton.qml GistPopup.qml; do
   [ -f "$Q/modules/ii/bar/$f" ] && cp "$Q/modules/ii/bar/$f" "$BACKUP/"
-  install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
+install -Dm644 "$REPO/GistButton.qml" "$Q/modules/ii/bar/GistButton.qml"
+rm -f "$Q/modules/ii/bar/GistPopup.qml"   # merged into GistButton.qml
 install -Dm755 "$REPO/gist-widget.sh" "$SCRIPT"
 install -Dm644 "$REPO/icons/github-symbolic.svg" "$Q/assets/icons/github-symbolic.svg"
 python3 - "$BAR" <<'PY'

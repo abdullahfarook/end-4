@@ -7,10 +7,12 @@ Q="$HOME/.config/quickshell/ii"; BAR="$Q/modules/ii/bar/BarContent.qml"; KEYBIND
 BACKUP="$HOME/backups/google-search/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$BAR" "$KEYBINDS" "$BACKUP/"
 command -v qml6 >/dev/null && pacman -Q qt6-webengine >/dev/null 2>&1 || { echo "needs qt6-declarative + qt6-webengine: pkexec pacman -S qt6-declarative qt6-webengine" >&2; exit 1; }
+"$REPO/../widget-base/install.sh"   # shared panel behavior (WidgetBase.qml)
 for f in GoogleSearchButton.qml GoogleSearchPopup.qml; do
   [ -f "$Q/modules/ii/bar/$f" ] && cp "$Q/modules/ii/bar/$f" "$BACKUP/"
-  install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
+install -Dm644 "$REPO/GoogleSearchButton.qml" "$Q/modules/ii/bar/GoogleSearchButton.qml"
+rm -f "$Q/modules/ii/bar/GoogleSearchPopup.qml"   # merged into GoogleSearchButton.qml
 install -Dm755 "$REPO/gsearch.sh" "$HOME/.config/hypr/custom/gsearch.sh"
 install -Dm644 "$REPO/gsearch.qml" "$HOME/.config/hypr/custom/gsearch.qml"
 rm -f "$HOME/.config/hypr/custom/gsearch.py"

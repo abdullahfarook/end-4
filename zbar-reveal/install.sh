@@ -11,7 +11,7 @@ python3 - "$BAR" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
 if "RevealSlot" in s: sys.exit(0)
-pins = {"MailButton": ("mailBtn", "mailBtn.newTotal > 0 || mailBtn.popupOpen"), "TeamsButton": ("teamsBtn", "teamsBtn.unread > 0"),
+pins = {"MailButton": ("mailBtn", "mailBtn.newTotal > 0 || mailBtn.open || mailBtn.menuOpen"), "TeamsButton": ("teamsBtn", "teamsBtn.unread > 0"),
         "FileSearchButton": ("fileBtn", "fileBtn.open"), "DockerButton": ("dockerBtn", "dockerBtn.open || (dockerBtn.available && dockerBtn.running > 0)"),
         "TaskManagerButton": ("taskBtn", "taskBtn.open"), "GoogleSearchButton": ("googleBtn", "googleBtn.open"),
         "GistButton": ("gistBtn", "gistBtn.pinned")}

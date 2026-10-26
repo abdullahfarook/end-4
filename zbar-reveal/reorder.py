@@ -27,7 +27,7 @@ if "GridLayout" not in s:
         s = s.replace(b, b[:i] + f"{ind}Layout.row: 0\n{ind}Layout.column: {c}\n" + b[i:], 1)
     old = "RowLayout { // icon row: AI button always visible, the rest slide out on hover\n                id: iconRow\n                spacing: 0\n"
     new = ("GridLayout { // icon row: AI button always visible, the rest slide out on hover\n                id: iconRow\n                rows: 1\n                columnSpacing: 0\n                rowSpacing: 0\n"
-           "                readonly property bool mailPinned: mailBtn.newTotal > 0 || mailBtn.popupOpen\n"
+           "                readonly property bool mailPinned: mailBtn.newTotal > 0 || mailBtn.open || mailBtn.menuOpen\n"
            "                readonly property bool teamsPinned: teamsBtn.unread > 0\n"
            "                readonly property int mailCol: (teamsPinned && !mailPinned) ? 2 : 1\n"
            "                readonly property int teamsCol: 3 - mailCol\n")
