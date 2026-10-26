@@ -23,8 +23,11 @@ RippleButton {
 
     // Newest matching entry: after Teams restarts, the shell can keep the dead process's entry, whose menu is gone
     readonly property var trayItem: SystemTray.items.values.filter(i => `${i.id} ${i.title}`.toLowerCase().includes("teams")).pop() ?? null
-    // Teams counts as running while it has a window (it is always docked on special:teams) or a tray entry; otherwise the icon dims
-    readonly property bool running: trayItem !== null || HyprlandData.windowList.some(w => w.class === "teams-for-linux")
+    // Teams counts as running while its process exists; otherwise the icon dims. Not the tray entry: after Teams crashes the
+    // shell can keep the dead entry, which kept the icon bright while Teams was not running.
+    property bool running: false
+    Process { id: aliveProc; command: ["pgrep", "-x", "teams-for-linux"]; onExited: code => root.running = code === 0 }
+    Timer { interval: 3000; repeat: true; running: true; triggeredOnStart: true; onTriggered: if (!aliveProc.running) aliveProc.running = true }
     readonly property int unread: {
         let n = 0;
         for (const w of HyprlandData.windowList) {
