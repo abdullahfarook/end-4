@@ -138,7 +138,7 @@ Scope {
             // Only things happening on this popup's own monitor close it (opening the AI panel or clicking on the other monitor must not)
             if (event.name === "activespecial") { const q = event.data.split(","); if (q[0] !== "" && q[1] === popupMon) root.visible = false; return; }
             if (event.name === "workspacev2") { wsCheck.restart(); return; }   // decided once a monitor switch had time to show up
-            if (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss" && Hyprland.focusedMonitor?.name === popupMon) root.visible = false
+            if (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss" && event.data !== "quickshell:closebutton" && Hyprland.focusedMonitor?.name === popupMon) root.visible = false
         }
     }
 
