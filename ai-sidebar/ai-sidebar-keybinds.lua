@@ -12,5 +12,4 @@ hl.window_rule({ match = { class = "^(ai-sidebar)$" }, animation = "slide left" 
 hl.window_rule({ match = { class = "^(ai-sidebar)$" }, rounding = 17, rounding_power = 2 })
 -- Slide in from the left edge like the shell sidebar (special workspaces otherwise use the global slidevert)
 hl.workspace_rule({ workspace = "special:ai", gaps_out = 12 })
-hl.bind("mouse:272", hl.dsp.exec_cmd("~/.config/hypr/custom/ai-sidebar-clickaway.sh"), { non_consuming = true, description = "AI panel: close on outside click" })
 -- <<< ai-sidebar <<<

@@ -2,14 +2,15 @@
 # Toggles the left AI sidebar. Backend comes from ai.sidebarBackend in the illogical-impulse config:
 #   native -> the shell's own Intelligence sidebar
 #   claude / codex / antigravity -> a kitty window running that CLI on the "ai" special workspace
-date +%s%3N > "${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar-toggled"  # lets the click-away handler ignore the click that caused this toggle
+P="$HOME/.config/hypr/custom/side-panel.sh"   # shared window-panel behavior (closing, monitors, focus)
+"$P" stamp ai  # lets click-away ignore the click that caused this toggle
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/ai-sidebar.lock"; flock 9
 backend=$(jq -r '.ai.sidebarBackend // "native"' "$HOME/.config/illogical-impulse/config.json" 2>/dev/null)
 if [ "$backend" != claude ] && [ "$backend" != codex ] && [ "$backend" != antigravity ]; then
     exec hyprctl dispatch 'hl.dsp.global("quickshell:sidebarLeftToggle")'
 fi
 # Window title carries the backend so a changed setting replaces a stale window
-nohup "$HOME/.config/hypr/custom/ai-sidebar-watch.sh" >/dev/null 2>&1 9>&- &
+nohup "$P" watch >/dev/null 2>&1 9>&- &
 title="ai-sidebar-$backend"
 clients=$(hyprctl clients -j)
 stale=$(jq -r '.[] | select(.class=="ai-sidebar" and .title!="'"$title"'") | .address' <<<"$clients")
@@ -17,8 +18,8 @@ for a in $stale; do hyprctl dispatch "hl.dsp.window.close({ window = \"address:$
 win=$(jq -c '[.[] | select(.class=="ai-sidebar" and .title=="'"$title"'")][0] // empty' <<<"$clients")
 if [ -n "$win" ]; then
     addr=$(jq -r .address <<<"$win")
-    if hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:ai")' >/dev/null; then
-        hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")' >/dev/null  # shown -> hide
+    if [ "$("$P" mon ai)" = "$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')" ]; then
+        "$P" hide ai force  # shown on this monitor -> hide (shown on another monitor -> show it here, below)
     else
         # The window can be stranded on a normal workspace (moved/dragged/restored there): dock it back first
         if [ "$(jq -r .workspace.name <<<"$win")" != special:ai ]; then

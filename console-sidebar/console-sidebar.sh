@@ -1,47 +1,24 @@
 #!/usr/bin/env bash
 # Left console panel: a kitty shell on the "console" special workspace, styled like the AI sidebar.
+# Closing, monitors and focus rules are shared by all window panels: see side-panel.sh.
 #   console-sidebar.sh          toggle (start the terminal if needed)
 #   console-sidebar.sh hide     hide if shown
-#   console-sidebar.sh clickaway hide if the click landed outside the panel
 #   console-sidebar.sh stop     kill the terminal (next toggle starts a fresh one)
-#   console-sidebar.sh watch    hide when focus moves to another window (single instance)
-stamp="${XDG_RUNTIME_DIR:-/tmp}/console-sidebar-toggled"
-[ "${1:-toggle}" = toggle ] && date +%s%3N > "$stamp"  # before anything slow: lets click-away ignore the click that caused this toggle
-exec 9>"${XDG_RUNTIME_DIR:-/tmp}/console-sidebar.lock"
-shown() { hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:console")' >/dev/null; }
+P="$HOME/.config/hypr/custom/side-panel.sh"
 case "${1:-toggle}" in
-hide)
-    flock 9; shown && hyprctl dispatch 'hl.dsp.workspace.toggle_special("console")' >/dev/null; exit 0 ;;
-clickaway)
-    sleep 0.2
-    [ -e "$stamp" ] && [ $(( $(date +%s%3N) - $(cat "$stamp") )) -lt 1000 ] && exit 0
-    read -r x y w h < <(hyprctl clients -j | jq -r '.[] | select(.class=="console-sidebar" and .workspace.name=="special:console") | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' | head -1)
-    [ -n "${x:-}" ] && shown || exit 0
-    read -r cx cy < <(hyprctl cursorpos | tr -d ',')
-    if [ "$cx" -lt "$x" ] || [ "$cx" -gt $((x + w)) ] || [ "$cy" -lt "$y" ] || [ "$cy" -gt $((y + h)) ]; then "$0" hide; fi
-    exit 0 ;;
+hide) exec "$P" hide console force ;;
 stop)
     for pid in $(hyprctl clients -j | jq -r '.[]|select(.class=="console-sidebar")|.pid'); do kill "$pid"; done; exit 0 ;;
-watch)
-    exec 8>"${XDG_RUNTIME_DIR:-/tmp}/console-sidebar-watch.lock"; flock -n 8 || exit 0
-    socat -u "UNIX-CONNECT:$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock" - | while IFS= read -r line; do
-        case "$line" in activewindow\>\>*) ;; *) continue ;; esac
-        class=${line#activewindow>>}; class=${class%%,*}
-        [ -z "$class" ] || [ "$class" = console-sidebar ] && continue
-        sleep 0.05
-        cur=$(hyprctl activewindow -j | jq -r 'select(.workspace.name != "special:console") | .class // empty')
-        [ -z "$cur" ] || [ "$cur" = console-sidebar ] && continue
-        "$0" hide
-    done ;;
 toggle)
-    flock 9
-    nohup "$0" watch >/dev/null 2>&1 9>&- &
+    "$P" stamp console   # before anything slow: its own click/focus must not close it again
+    exec 9>"${XDG_RUNTIME_DIR:-/tmp}/console-sidebar.lock"; flock 9
+    nohup "$P" watch >/dev/null 2>&1 9>&- &
     win=$(hyprctl clients -j | jq -c '[.[] | select(.class=="console-sidebar")][0] // empty')
     if [ -n "$win" ]; then
         addr=$(jq -r .address <<<"$win")
-        if shown; then
-            hyprctl dispatch 'hl.dsp.workspace.toggle_special("console")' >/dev/null
-        else
+        if [ "$("$P" mon console)" = "$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')" ]; then
+            "$P" hide console force   # shown on this monitor: hide
+        else  # hidden, or shown on another monitor: show it here
             [ "$(jq -r .workspace.name <<<"$win")" != special:console ] &&
                 hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:console\", window = \"address:$addr\", follow = false })" >/dev/null
             hyprctl dispatch 'hl.dsp.workspace.toggle_special("console")' >/dev/null

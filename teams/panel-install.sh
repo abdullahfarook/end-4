@@ -5,7 +5,8 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/teams-panel/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$KEYBINDS" "$BAR" "$Q/services/TrayService.qml" "$BACKUP/"
-for f in teams-panel.sh teams-panel-hide.sh teams-panel-clickaway.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
+"$REPO/../widget-base/install.sh"   # shared panel behavior (side-panel.sh)
+for f in teams-panel.sh teams-panel-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 install -Dm644 "$REPO/TeamsButton.qml" "$Q/modules/ii/bar/TeamsButton.qml"
 # The Teams icon is on the left bar now: hide Teams from the right-hand tray (TeamsButton still reads SystemTray directly for its menu).
 python3 - "$Q/services/TrayService.qml" <<'PY'

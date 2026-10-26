@@ -8,5 +8,4 @@ hl.window_rule({ match = { class = "^(console-sidebar)$" }, move = { 5, 45 } })
 hl.window_rule({ match = { class = "^(console-sidebar)$" }, animation = "slide left" })
 hl.window_rule({ match = { class = "^(console-sidebar)$" }, rounding = 17, rounding_power = 2 })
 hl.workspace_rule({ workspace = "special:console", gaps_out = 12 })
-hl.bind("mouse:272", hl.dsp.exec_cmd("~/.config/hypr/custom/console-sidebar.sh clickaway"), { non_consuming = true, description = "Console panel: close on outside click" })
 -- <<< console-sidebar <<<

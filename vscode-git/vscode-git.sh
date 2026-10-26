@@ -2,15 +2,16 @@
 # Toggles the Git panel: a dedicated VS Code instance (own profile, Source Control + diff only) on the "vgit" special
 # workspace, same geometry/animation as the AI sidebar. Window is matched by its dev-host title prefix.
 D="$HOME/.local/share/vscode-git"
-date +%s%3N > "${XDG_RUNTIME_DIR:-/tmp}/vscode-git-toggled"  # lets click-away ignore the click that caused this toggle
+P="$HOME/.config/hypr/custom/side-panel.sh"   # shared window-panel behavior (closing, monitors, focus, one panel per monitor)
+"$P" stamp vgit  # lets click-away ignore the click that caused this toggle
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/vscode-git.lock"; flock 9
-nohup "$HOME/.config/hypr/custom/vscode-git-watch.sh" >/dev/null 2>&1 9>&- &
-# One panel at a time: hide the AI panel if it is shown
-hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:ai")' >/dev/null \
-    && hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")' >/dev/null
+nohup "$P" watch >/dev/null 2>&1 9>&- &
+nohup "$HOME/.config/hypr/custom/vscode-git-watch.sh" >/dev/null 2>&1 9>&- &   # Git-specific: grow/shrink with the diff editor
 if hyprctl clients -j | jq -e '.[] | select(.title|test("⎇"))' >/dev/null; then
-    hyprctl dispatch 'hl.dsp.workspace.toggle_special("vgit")' >/dev/null
+    if [ "$("$P" mon vgit)" = "$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')" ]; then "$P" hide vgit force   # shown here: hide
+    else hyprctl dispatch 'hl.dsp.workspace.toggle_special("vgit")' >/dev/null; fi   # hidden or on another monitor: show here
 else
+    "$P" launching vgit   # VS Code takes seconds to start: its window must not count as "shown without a toggle"
     # Keep the Source Control Graph (commit log) view hidden: it is a saved view state, applied while VS Code is not running.
     scm="$D/User/globalStorage/state.vscdb"; k="workbench.scm.views.state.hidden"
     if [ -f "$scm" ]; then
@@ -37,6 +38,7 @@ else
     hyprctl dispatch "hl.dsp.window.resize({ x = 392, y = $((mh - 58)), relative = false, window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.move({ x = $((mx + 6)), y = $((my + 46)), relative = false, window = \"$w\" })" >/dev/null
     sleep 0.5
+    "$P" stamp vgit
     # The title rule may already have revealed the panel: only toggle if it is not shown yet (else it would hide again)
     hyprctl monitors -j | jq -e 'any(.[]; .specialWorkspace.name=="special:vgit")' >/dev/null \
         || hyprctl dispatch 'hl.dsp.workspace.toggle_special("vgit")' >/dev/null

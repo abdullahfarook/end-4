@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Started by vscode-git.sh; single instance.
-#  - hides the git panel when the launcher/overview opens
 #  - when an editor/diff opens (title gets " - <file>") the window grows to the RIGHT only (left panel width/height/position untouched);
 #    when the editor closes it shrinks back to LEFT. The expanded width is the last one you left it at (drag the right edge to change it).
 exec 9>"$XDG_RUNTIME_DIR/vscode-git-watch.lock"; flock -n 9 || exit 0
@@ -33,7 +32,6 @@ resize() {  # $1 address, $2 narrow|wide
 }
 socat -u "UNIX-CONNECT:$sock" - | while IFS= read -r line; do
     case "$line" in
-        openlayer\>\>quickshell:overview) "$HOME/.config/hypr/custom/vscode-git-hide.sh" ;;
         windowtitlev2\>\>*)
             rest=${line#windowtitlev2>>}; addr=0x${rest%%,*}; title=${rest#*,}
             case "$title" in

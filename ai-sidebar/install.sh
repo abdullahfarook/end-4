@@ -30,7 +30,8 @@ if 'value: "antigravity"' not in s:
     i = s.index(old); s = s[:i] + new + s[i + len(old):]
     open(p, "w").write(s); print("Antigravity option added (restart the shell).")
 PY
-for f in ai-sidebar-stop.sh ai-sidebar.sh ai-sidebar-watch.sh ai-sidebar-clickaway.sh ai-sidebar-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
+"$REPO/../widget-base/install.sh"   # shared panel behavior (side-panel.sh)
+for f in ai-sidebar-stop.sh ai-sidebar.sh ai-sidebar-hide.sh; do install -Dm755 "$REPO/$f" "$HOME/.config/hypr/custom/$f"; done
 python3 - "$KEYBINDS" "$REPO/ai-sidebar-keybinds.lua" <<'PY'
 import re, sys
 target, snippet = sys.argv[1], open(sys.argv[2]).read().rstrip("\n")

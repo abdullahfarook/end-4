@@ -9,6 +9,7 @@ echo "Backed up to $BACKUP"
 if grep -q "ConsoleButton {" "$Q/modules/ii/bar/BarContent.qml"; then echo "QML patch already applied."
 else patch -d "$Q" -p1 -s -f --no-backup-if-mismatch < "$REPO/console-sidebar.patch" && echo "QML patch applied (restart the shell)."; fi
 install -Dm644 "$REPO/ConsoleButton.qml" "$Q/modules/ii/bar/ConsoleButton.qml"
+"$REPO/../widget-base/install.sh"   # shared panel behavior (side-panel.sh)
 install -Dm755 "$REPO/console-sidebar.sh" "$HOME/.config/hypr/custom/console-sidebar.sh"
 python3 - "$KEYBINDS" "$REPO/console-sidebar-keybinds.lua" <<'PY'
 import re, sys

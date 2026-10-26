@@ -12,7 +12,7 @@ mkdir -p "$BACKUP/qml" "$BACKUP/hypr"
 
 # Backups
 [ -f "$KB" ] && cp "$KB" "$BACKUP/hypr/"
-cp "$H"/super-tab*.sh "$H"/ai-sidebar.sh "$H"/ai-sidebar-watch.sh "$H"/ai-sidebar-clickaway.sh "$H"/ai-sidebar-hide.sh "$BACKUP/hypr/" 2>/dev/null || true
+cp "$H"/super-tab*.sh "$H"/ai-sidebar.sh "$H"/ai-sidebar-watch.sh "$H"/ai-sidebar-clickaway.sh "$H"/ai-sidebar-hide.sh "$H"/side-panel.sh "$BACKUP/hypr/" 2>/dev/null || true
 [ -f "$CFG" ] && cp "$CFG" "$BACKUP/"
 cp -r "$Q" "$BACKUP/qml/" 2>/dev/null || true
 echo "Backed up to $BACKUP"
@@ -22,14 +22,15 @@ if [ -f "$KB" ]; then
 python3 - "$KB" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
-for n in ("super-tab-workspaces", "alt-tab-workspaces", "ai-sidebar"):
+for n in ("super-tab-workspaces", "alt-tab-workspaces", "ai-sidebar", "side-panel"):
     s = re.sub(r"\n*-- >>> %s >>>.*?-- <<< %s <<<\n*" % (n, n), "\n", s, flags=re.S)
 open(p, "w").write(s.rstrip("\n") + "\n")
 PY
 fi
 # 2. Installed scripts
 pkill -f ai-sidebar-watch.sh 2>/dev/null || true
-rm -f "$H"/super-tab.sh "$H"/super-tab-release.sh "$H"/ai-sidebar.sh "$H"/ai-sidebar-watch.sh "$H"/ai-sidebar-clickaway.sh "$H"/ai-sidebar-hide.sh
+pkill -f "side-panel.sh watch" 2>/dev/null || true
+rm -f "$H"/side-panel.sh "$H"/super-tab.sh "$H"/super-tab-release.sh "$H"/ai-sidebar.sh "$H"/ai-sidebar-watch.sh "$H"/ai-sidebar-clickaway.sh "$H"/ai-sidebar-hide.sh
 # 3. QML patches (reverse only if currently applied)
 for p in "$REPO/cpu-info/cpu-info.patch" "$REPO/ai-sidebar/ai-sidebar.patch" "$REPO/widgets/frequent-apps.patch"; do
     [ -f "$p" ] || continue

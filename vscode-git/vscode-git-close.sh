@@ -8,7 +8,7 @@ if jq -e '.class == "org.arqueon.dankmail"' >/dev/null <<<"$active"; then
     exec dmail toggle   # hides the window; the daemon keeps syncing
 fi
 if jq -e '.class == "ai-sidebar"' >/dev/null <<<"$active"; then
-    exec hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")'   # hide the AI panel; the session keeps running
+    exec "$HOME/.config/hypr/custom/side-panel.sh" hide ai force   # hide the AI panel; the session keeps running
 fi
 if jq -e '.class == "console-sidebar"' >/dev/null <<<"$active"; then
     exec "$HOME/.config/hypr/custom/console-sidebar.sh" hide   # hide the console panel; the shell keeps running
