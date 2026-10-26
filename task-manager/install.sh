@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Task manager widget: bar button + popup (process list, PID/CPU/RAM, filter); popup loaded only while open (idempotent).
+# Task manager widget: bar button + side panel (WidgetBase) (process list, PID/CPU/RAM, filter); popup loaded only while open (idempotent).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 Q="$HOME/.config/quickshell/ii"; BAR="$Q/modules/ii/bar/BarContent.qml"
 BACKUP="$HOME/backups/task-manager/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP"; cp "$BAR" "$BACKUP/"
+"$REPO/../widget-base/install.sh"   # shared panel behavior (WidgetBase.qml)
 for f in TaskManagerButton.qml TaskManagerPopup.qml; do
   [ -f "$Q/modules/ii/bar/$f" ] && cp "$Q/modules/ii/bar/$f" "$BACKUP/"
-  install -Dm644 "$REPO/$f" "$Q/modules/ii/bar/$f"
 done
+install -Dm644 "$REPO/TaskManagerButton.qml" "$Q/modules/ii/bar/TaskManagerButton.qml"
+rm -f "$Q/modules/ii/bar/TaskManagerPopup.qml"   # merged into TaskManagerButton.qml
 python3 - "$BAR" <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
