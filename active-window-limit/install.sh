@@ -26,10 +26,16 @@ block = """
         HoverHandler { id: hh }
         StyledPopup {
             hoverTarget: hoverArea
-            StyledText {
-                width: Math.min(implicitWidth, 520)
-                wrapMode: Text.Wrap
-                text: titleText.text
+            Item {
+                anchors.centerIn: parent
+                implicitWidth: Math.min(fullTitle.implicitWidth, 420)
+                implicitHeight: fullTitle.implicitHeight
+                StyledText {
+                    id: fullTitle
+                    width: parent.width
+                    wrapMode: Text.Wrap
+                    text: titleText.text
+                }
             }
         }
     }
