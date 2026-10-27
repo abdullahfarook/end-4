@@ -55,10 +55,11 @@ WidgetBase {
     property string _viewerPointer: ""
     property var currentThread: null       // full thread (with messages) shown in the popup's detail panel
     property int selectedId: -1
-    property int pageSize: 25
+    property int pageSize: 15
     property int limit: pageSize            // how many threads the list currently asks the local cache for
     property bool localExhausted: false     // the cache returned fewer than `limit` threads
     property bool olderDone: false          // the server has no older mail left to pull
+    property bool listLoading: false        // list requested (panel open) but not answered yet: no empty-state flash
     property bool loadingMore: false        // spinner at the bottom of the list
     property var olderNext: null            // opaque per-account cursor for threads.fetchOlder
     property int _olderReqId: -1
@@ -98,6 +99,9 @@ WidgetBase {
         _statusReqId = call("system.status", {});
         _accountsReqId = call("accounts.list", {});
         if (selectedId >= 0) _threadReqId = call("threads.get", { "id": selectedId });
+        // Lazy: the thread list is only fetched while the panel is open (badge/unread/chip counters use their own requests)
+        if (!open) return;
+        listLoading = true;
         _threadsReqId = call("threads.list", view === "spam" ? { "inbox": false, "label": "SPAM", "limit": limit, "account": accountFilter }
             : { "inbox": view !== "starred", "starred": view === "starred", "unread": view === "unread", "limit": limit, "account": accountFilter });
     }
@@ -201,7 +205,7 @@ WidgetBase {
             if (Object.keys(p).length === 0) { syncing = false; syncGuard.stop(); }
         }
         if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
-        if (msg.error) { requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
+        if (msg.error) { listLoading = false; requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
         if (msg.id in _newestReqs && Array.isArray(msg.result)) {
             const n = Object.assign({}, newest); n[_newestReqs[msg.id]] = msg.result.length ? msg.result[0].lastMessageAt : "";
             const tm = Object.assign({}, times); tm[_newestReqs[msg.id]] = msg.result.map(t => t.lastMessageAt);
@@ -223,7 +227,7 @@ WidgetBase {
             unread = msg.result.unread || 0;
             dnd = !!msg.result.dnd;
         } else if (msg.id === _threadsReqId && Array.isArray(msg.result)) {
-            threads = msg.result;
+            threads = msg.result; listLoading = false;
             localExhausted = msg.result.length < limit;
             if (_olderReqId < 0) loadingMore = false;
         }
@@ -240,7 +244,7 @@ WidgetBase {
     // Opening refreshes; closing (by any path) closes the thread and goes back to All accounts (the selection is not persisted)
     onOpenChanged: {
         if (open) { limit = pageSize; markSeen(); refresh(); }
-        else { closeThread(); if (accountFilter !== "") setAccount(""); }
+        else { closeThread(); rawHtml = ({}); htmlReady = false; threads = []; listLoading = false; limit = pageSize; localExhausted = false; if (accountFilter !== "") setAccount(""); }
     }
 
     Component.onCompleted: { Quickshell.execDetached(["mkdir", "-p", viewerDir]); cmdSocket.connected = true; }
@@ -536,7 +540,7 @@ WidgetBase {
 
                 StyledText {
                     anchors.centerIn: parent
-                    visible: root.threads.length === 0
+                    visible: root.threads.length === 0 && !root.listLoading
                     text: root.requestError !== "" ? root.requestError
                         : root.view === "starred" ? "No starred mail."
                         : root.view === "spam" ? "No spam."
