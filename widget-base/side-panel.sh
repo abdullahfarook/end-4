@@ -6,6 +6,11 @@
 #   - a click outside the panel, focus moving to another window, a workspace switch or the overview on its own monitor close it
 # Per-panel scripts keep only what is specific to them (how to start/dock the window) and call this one for the rest.
 #
+#   side-panel.sh toggle NAME [W]     the panel's bar button/keybind: hide it if shown on the focused monitor, else show it
+#                                     here; exit 3 if its window does not exist (the caller launches the app, then calls show)
+#   side-panel.sh show NAME [W]       dock NAME's window onto its special workspace and show it on the focused monitor
+#                                     (W: float it as a W px wide panel at the left edge; unset: the window rules place it)
+#   side-panel.sh dock NAME [W]       park NAME's window on its (hidden) special workspace without showing it (e.g. at login)
 #   side-panel.sh stamp NAME          record that NAME was toggled now (its own click/focus must not close it again)
 #   side-panel.sh launching NAME      NAME is starting (window may appear seconds later): treat as toggled for 60 s
 #   side-panel.sh recent NAME MS      exit 0 if NAME was toggled within MS milliseconds
@@ -70,7 +75,45 @@ hide() {  # $1 name, $2 force?  (serialized per panel, so concurrent callers can
 }
 hide_on() { local p; p=$(panel_on "$1"); [ -n "$p" ] && is_panel "$p" && hide "$p" force; return 0; }
 
+win_of() { hyprctl clients -j | jq -r "[.[] | select($(match "$1"))] | sort_by(-(.size[0]*.size[1])) | .[0] // empty | \"\\(.address) \\(.workspace.name)\"" ; }
+visible_ws() { hyprctl monitors -j | jq -e --arg w "$1" 'any(.[]; .activeWorkspace.name == $w)' >/dev/null; }
+place() {  # $1 address, $2 width: float at the panel spot of the focused monitor (below the bar, full height)
+    local mh mx my w="address:$1"
+    read -r mh mx my < <(hyprctl monitors -j | jq -r '.[]|select(.focused)|"\(.height) \(.x) \(.y)"')
+    hyprctl dispatch "hl.dsp.window.float({ action = \"enable\", window = \"$w\" })" >/dev/null
+    hyprctl dispatch "hl.dsp.window.resize({ x = $2, y = $((mh - 58)), relative = false, window = \"$w\" })" >/dev/null
+    hyprctl dispatch "hl.dsp.window.move({ x = $((mx + 6)), y = $((my + 46)), relative = false, window = \"$w\" })" >/dev/null
+}
+show() {  # $1 name, $2 address, $3 workspace, $4 width?
+    [ "$3" != "special:$1" ] && hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:$1\", window = \"address:$2\", follow = false })" >/dev/null
+    [ -n "${4:-}" ] && place "$2" "$4"
+    # stamp at the real show (not only at the click): a slow lock or launch before it must not let the watchers hide it again
+    now > "$R/side-panel-$1-toggled"
+    [ "$(mon_of "$1")" = "$(focused_mon)" ] || hyprctl dispatch "hl.dsp.workspace.toggle_special(\"$1\")" >/dev/null
+    now > "$R/side-panel-$1-toggled"
+    sleep 0.1; hyprctl dispatch "hl.dsp.focus({ window = \"address:$2\" })" >/dev/null   # typing goes to it
+}
+
 case "${1:-}" in
+toggle)
+    name=$2; now > "$R/side-panel-$name-toggled"   # before anything slow: this click must not close it again
+    exec 6>"$R/side-panel-$name-toggle.lock"; flock 6
+    [ "$(age "$name" hidden)" -lt 1000 ] && exit 0   # this click already closed it (click-away on the button)
+    nohup "$SELF" watch >/dev/null 2>&1 6>&- &
+    read -r a ws < <(win_of "$name")
+    [ -n "${a:-}" ] || { echo $(( $(now) + 60000 )) > "$R/side-panel-$name-toggled"; exit 3; }   # caller launches it
+    if [ "$(mon_of "$name")" = "$(focused_mon)" ]; then hide "$name" force; exit 0; fi   # shown here: hide
+    if [ "$ws" != "special:$name" ] && visible_ws "$ws"; then   # stranded on screen: docking it back is the hide
+        hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:$name\", window = \"address:$a\", follow = false })" >/dev/null; exit 0
+    fi
+    show "$name" "$a" "$ws" "${3:-}" ;;
+show)
+    read -r a ws < <(win_of "$2"); [ -n "${a:-}" ] || exit 3
+    show "$2" "$a" "$ws" "${3:-}" ;;
+dock)
+    read -r a ws < <(win_of "$2"); [ -n "${a:-}" ] || exit 3
+    [ "$ws" != "special:$2" ] && hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:$2\", window = \"address:$a\", follow = false })" >/dev/null
+    [ -n "${3:-}" ] && place "$a" "$3"; exit 0 ;;
 stamp) now > "$R/side-panel-$2-toggled" ;;
 launching) echo $(( $(now) + 60000 )) > "$R/side-panel-$2-toggled" ;;
 recent) [ "$(age "$2" toggled)" -lt "$3" ] ;;

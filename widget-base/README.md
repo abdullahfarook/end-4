@@ -105,19 +105,21 @@ to the left, `slide left` animation, `workspace = "special:<name>"`). Its own sc
 everything else is shared. Register a new panel in `side-panel.sh`: add the name to `PANELS` and a window match to
 `match()`.
 
+The toggle itself is shared too: a panel script never shows, hides, docks or focuses its window itself, so every
+panel gets the same order of steps and the same timing guards.
+
 ```bash
 P="$HOME/.config/hypr/custom/side-panel.sh"
-"$P" stamp myname                              # first thing in a toggle: its own click must not close it again
-nohup "$P" watch >/dev/null 2>&1 &             # make sure the shared watcher runs (single instance)
-if [ "$("$P" mon myname)" = "$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')" ]; then
-    "$P" hide myname force                     # shown on this monitor: hide
-else
-    hyprctl dispatch 'hl.dsp.workspace.toggle_special("myname")'   # hidden or on another monitor: show here
-fi
+"$P" toggle myname [WIDTH]; [ $? = 3 ] || exit 0   # hide / show here / dock a stray window; 3 = no window yet
+start-my-app &                                     # launch, wait for the window, then:
+"$P" show myname [WIDTH]
 ```
 
 | Command | Use |
 |---|---|
+| `toggle NAME [W]` | The bar button / keybind action. Shown on the focused monitor: hide. Hidden or on another monitor: dock it onto its special workspace and show it here, focused. Stranded on screen: docking it back is the hide. Exit 3: no window, the caller launches the app. W: float it as a W px wide panel at the left edge (else the window rules place it). |
+| `show NAME [W]` | Show NAME's window here (after a launch). Stamps at the moment it appears, so a slow launch can't be closed again by the watchers. |
+| `dock NAME [W]` | Park the window on its hidden special workspace without showing it (e.g. at login). Exit 3: no window. |
 | `stamp NAME` | Record a toggle now (click-away and the watcher ignore its own click/focus for a moment). |
 | `launching NAME` | The app is starting and its window may take seconds: treat as toggled for 60 s (then `stamp` again before showing). |
 | `recent NAME MS` | Exit 0 if NAME was toggled within MS ms. |
