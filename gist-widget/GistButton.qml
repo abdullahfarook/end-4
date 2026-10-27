@@ -8,7 +8,9 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import Quickshell.Hyprland
 
-// Bar button for the Gist widget: your GitHub gists (gh) mirrored in a local cache by gist-widget.sh.
+// Bar button for the Gist widget: your GitHub gists (gh) mirrored in a local cache by gist-widget.sh, plus local notes: plain
+// files in a folder (gist-local.py) that list, filter, edit and draft like gists but stay on this computer until uploaded.
+// Settings (the panel's gear): the local notes folder and the drafts folder, in ~/.config/gist-widget/settings.json.
 // Syncs in the background every 30 minutes and on open if the last sync is older than 5 minutes (loader line under the icon while it runs).
 // Unsaved create/edit drafts are kept locally (never sent to GitHub before Save) and survive restarts.
 // Left click = side panel (list/filter, view, create, edit), right click = menu (new, secret gist from clipboard, sync, open GitHub).
@@ -25,7 +27,55 @@ WidgetBase {
     property bool busy: actProc.running     // a create/update/delete/clip is running
     property string actError: ""
     property var _onDone: null
-    function gistById(id) { return gists.find(g => g.id === id) ?? null }
+    property var localGists: []            // gist-local.py index: same shape, ids "local:<name>", local: true, html_url/raw_url = paths
+    readonly property var allGists: localGists.concat(gists)
+    function gistById(id) { return allGists.find(g => g.id === id) ?? null }
+
+    // ---- Settings
+    readonly property string home: Quickshell.env("HOME")
+    readonly property string defaultLocalDir: `${home}/Documents/Gists`
+    readonly property string defaultDraftDir: `${home}/.local/state/gist-widget`
+    property string localDir: defaultLocalDir
+    property string draftDir: defaultDraftDir
+    function expand(p) { p = p.trim(); return p === "~" ? home : p.startsWith("~/") ? home + p.slice(1) : p }
+    function saveSettings(local, drafts) {
+        localDir = expand(local) || defaultLocalDir;
+        draftDir = expand(drafts) || defaultDraftDir;
+        Quickshell.execDetached(["mkdir", "-p", `${home}/.config/gist-widget`]);
+        settingsFile.setText(JSON.stringify({ localDir, draftDir }, null, 1));
+    }
+    FileView {
+        id: settingsFile
+        path: `${root.home}/.config/gist-widget/settings.json`
+        blockLoading: true
+        atomicWrites: true
+        printErrors: false
+        onLoaded: {
+            try {
+                const j = JSON.parse(text());
+                if (typeof j.localDir === "string" && j.localDir.trim() !== "") root.localDir = root.expand(j.localDir);
+                if (typeof j.draftDir === "string" && j.draftDir.trim() !== "") root.draftDir = root.expand(j.draftDir);
+            } catch (e) {}
+        }
+    }
+
+    // ---- Local notes: rescanned on open, every 15 s while open, after every action and when the folder changes
+    property string localError: ""
+    readonly property string localScript: `${home}/.config/hypr/custom/gist-local.py`
+    property bool _rescan: false
+    function scanLocal() { if (localProc.running) _rescan = true; else localProc.running = true }
+    onLocalDirChanged: { localGists = []; scanLocal() }
+    Process {
+        id: localProc
+        command: ["python3", root.localScript, "index", root.localDir]
+        stdout: StdioCollector { id: localOut }
+        stderr: StdioCollector { id: localErr }
+        onExited: code => {
+            if (code === 0) { try { root.localGists = JSON.parse(localOut.text); root.localError = ""; } catch (e) {} }
+            else root.localError = localErr.text.trim().split("\n").pop() || `local notes: failed (${code})`;
+            if (root._rescan) { root._rescan = false; running = true; }
+        }
+    }
 
     // ---- Drafts. Creating and editing always happen in a draft; nothing goes to GitHub until Save. Drafts are keyed by
     // gist id ("new-<time>" for a new gist), survive going back and closing the popup, and are autosaved locally 2 s after
@@ -36,6 +86,7 @@ WidgetBase {
     property string activeKey: ""          // draft open in the editor ("" = editor closed)
     property ListModel draft: ListModel {} // buffer: the open draft's files (orig = name on GitHub, "" for a new file; locked = only partly loaded)
     property string draftMode: ""          // create | edit
+    property bool draftLocal: false        // a local note (create: saved as files, not on GitHub)
     property string draftId: ""
     property string draftBase: ""          // the gist's updated_at when editing started (Save warns if GitHub has a newer version)
     property string origDesc: ""
@@ -63,7 +114,7 @@ WidgetBase {
         draft.clear();
         for (const f of d.files ?? []) draft.append({ orig: f.orig ?? "", name: f.name ?? "", content: f.content ?? "", origContent: f.origContent ?? "", locked: !!f.locked });
         draftMode = d.mode; draftId = d.id ?? ""; draftBase = d.base ?? ""; origDesc = d.origDesc ?? ""; draftDesc = d.desc ?? "";
-        draftPublic = !!d.public; removedFiles = d.removed ?? []; activeKey = d.key; draftTick++;
+        draftPublic = !!d.public; draftLocal = !!d.local; removedFiles = d.removed ?? []; activeKey = d.key; draftTick++;
     }
     function bufferObject() {
         const files = [];
@@ -72,16 +123,17 @@ WidgetBase {
             files.push({ orig: d.orig, name: d.name, content: d.content, origContent: d.origContent, locked: d.locked });
         }
         return { key: activeKey, mode: draftMode, id: draftId, base: draftBase, origDesc: origDesc, desc: draftDesc,
-                 public: draftPublic, removed: removedFiles, files: files };
+                 public: draftPublic, local: draftLocal, removed: removedFiles, files: files };
     }
+    property bool newLocal: false          // new drafts start as local notes (remembered by the panel)
     function beginCreate() {
         stash();
-        loadBuffer({ key: `new-${Date.now()}`, mode: "create", files: [{ orig: "", name: "", content: "", origContent: "", locked: false }] });
+        loadBuffer({ key: `new-${Date.now()}`, mode: "create", local: newLocal, files: [{ orig: "", name: "", content: "", origContent: "", locked: false }] });
     }
     function beginEdit(g) {   // continues the gist's draft if it has one
         stash();
         if (drafts[g.id]) { loadBuffer(drafts[g.id]); return; }
-        loadBuffer({ key: g.id, mode: "edit", id: g.id, base: g.updated_at, origDesc: g.description, desc: g.description, public: g.public,
+        loadBuffer({ key: g.id, mode: "edit", id: g.id, base: g.updated_at, origDesc: g.description, desc: g.description, public: g.public, local: !!g.local,
                      files: g.files.map(f => ({ orig: f.filename, name: f.filename, content: f.content, origContent: f.content, locked: f.truncated || f.clipped })) });
     }
     function openDraft(key) { if (drafts[key]) { stash(); loadBuffer(drafts[key]); } }
@@ -111,47 +163,64 @@ WidgetBase {
     function publish(args, payload, onDone) {
         const key = activeKey;
         return run(args, payload, (ok, out) => {
-            const [id, url, updated] = ok ? out.split("\n").pop().split(" ") : ["", "", ""];
+            const line = ok ? out.split("\n").pop() : "";
+            const [id, url, updated] = ok ? line.split(line.includes("\t") ? "\t" : " ") : ["", "", ""];   // local notes: tab-separated
             if (ok) {
                 if (activeKey === key) rebase(id, updated); else discardDraft(key);
-                if (args[0] === "create") Quickshell.clipboardText = url;
+                if (args[0] === "create") Quickshell.clipboardText = url;   // not for local notes: url is a path
             }
             if (onDone) { try { onDone(ok, id); } catch (e) {} }   // the popup may be gone by now
         });
     }
     function removeGist(id, onDone) {
-        return run(["delete", id], "", ok => {
+        return run(id.startsWith("local:") ? ["local", "delete", localDir, id] : ["delete", id], "", ok => {
             if (ok && drafts[id]) discardDraft(id);
             if (onDone) { try { onDone(ok); } catch (e) {} }
         });
     }
-    function persist() { if (draftFile.path !== "") draftFile.setText(JSON.stringify({ version: 2, drafts: drafts })) }
+    // Upload a local note as a new gist (the note then goes to the trash); onDone(ok, newId). Copies the gist's link.
+    function upload(id, isPublic, onDone) {
+        return run(["upload", localDir, id, isPublic ? "public" : "secret"], "", (ok, out) => {
+            const [nid, url] = ok ? out.split("\n").pop().split(" ") : ["", ""];
+            if (ok) Quickshell.clipboardText = url;
+            if (onDone) { try { onDone(ok, nid); } catch (e) {} }
+        });
+    }
+    function persist() { if (draftsLoaded && draftFile.path !== "") draftFile.setText(JSON.stringify({ version: 2, drafts: drafts })) }
     Timer { id: stashTimer; interval: 2000; onTriggered: root.stash() }
 
-    readonly property string stateDir: `${Quickshell.env("HOME")}/.local/state/gist-widget`
+    // Drafts folder (a setting): created 0700 first; moving it merges the drafts already there with the current ones.
     readonly property string screenKey: root.QsWindow.window?.screen?.name ?? ""
     property bool draftsLoaded: false
+    property bool draftDirReady: false
+    onDraftDirChanged: { draftDirReady = false; draftsLoaded = false; mkdirProc.running = true }
+    Process { id: mkdirProc; command: ["mkdir", "-p", "-m", "700", root.draftDir]; onExited: root.draftDirReady = true }
     FileView {
         id: draftFile
-        path: root.screenKey !== "" ? `${root.stateDir}/drafts-${root.screenKey}.json` : ""
+        path: root.screenKey !== "" && root.draftDirReady ? `${root.draftDir}/drafts-${root.screenKey}.json` : ""
         atomicWrites: true
         printErrors: false
         onLoaded: {
-            if (root.draftsLoaded) return;   // only the first read; later writes are ours
+            if (root.draftsLoaded) return;   // only the first read of this file; later writes are ours
             root.draftsLoaded = true;
             try {
                 const j = JSON.parse(text());
                 if (j.version === 2 && j.drafts && typeof j.drafts === "object") root.drafts = Object.assign({}, j.drafts, root.drafts);
             } catch (e) {}
+            root.persist();
         }
-        onLoadFailed: root.draftsLoaded = true
+        onLoadFailed: { root.draftsLoaded = true; root.persist() }
     }
-    Component.onCompleted: Quickshell.execDetached(["mkdir", "-p", "-m", "700", stateDir])
+    Component.onCompleted: { mkdirProc.running = true; scanLocal() }
     readonly property string script: `${Quickshell.env("HOME")}/.config/hypr/custom/gist-widget.sh`
     readonly property string cacheDir: `${Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache"}/gist-widget`
 
     // on open only when the last sync is over 5 min old; the button below syncs any time
-    onOpenChanged: if (open && (!lastSync || Date.now() - Date.parse(lastSync) > 300000)) sync()
+    onOpenChanged: {
+        if (!open) return;
+        scanLocal();
+        if (!lastSync || Date.now() - Date.parse(lastSync) > 300000) sync();
+    }
 
     function sync() { if (!syncProc.running) syncProc.running = true }
     // Run a mutation (create/update ID/delete ID/clip); payload goes to the script's stdin. onDone(ok, stdout) afterwards.
@@ -160,7 +229,7 @@ WidgetBase {
         actError = "";
         _onDone = onDone ?? null;
         actProc.payload = payload ?? "";
-        actProc.command = ["bash", root.script].concat(args);
+        actProc.command = args[0] === "local" ? ["python3", root.localScript].concat(args.slice(1)) : ["bash", root.script].concat(args);
         actProc.running = true;
         return true;
     }
@@ -206,6 +275,7 @@ WidgetBase {
                 root.actError = lines.length ? lines.pop() : `failed (${code})`;
             }
             indexFile.reload();
+            root.scanLocal();
             const cb = root._onDone; root._onDone = null;
             if (cb) cb(code === 0, out);
         }
@@ -275,13 +345,14 @@ WidgetBase {
     panelContent: Component { FocusScope {
         id: gs
         readonly property var store: root   // the button keeps the data (gists, drafts, sync) while the panel is closed
-        property string mode: "list"           // list | view | editor
+        property string mode: "list"           // list | view | editor | settings
         property string selectedId: ""
         readonly property var current: store.gistById(selectedId)
         property string query: ""
-        property string visibility: "all"      // all | public | secret | drafts
+        property string visibility: "all"      // all | public | secret | local | drafts
         property string sortKey: "updated"     // updated | created | name
         property bool confirmDelete: false
+        property bool confirmUpload: false     // view of a local note: "Upload as a secret / public gist?"
         property string confirmDiscardKey: ""  // draft waiting for "Discard?" confirmation
         property string notice: ""             // short confirmation ("Link copied")
         property string formError: ""
@@ -289,19 +360,22 @@ WidgetBase {
         property int draftGen: 0               // bumps when the buffer is replaced from outside the fields, so they re-read it
         property real now: Date.now()
         Timer { interval: 30000; repeat: true; running: true; onTriggered: gs.now = Date.now() }
+        Timer { interval: 15000; repeat: true; running: true; onTriggered: gs.store.scanLocal() }   // pick up edits made outside
 
         // Remembered across opens: visibility filter and sort
         readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/gist-widget.json`
         property bool stateReady: false
-        function saveState() { if (stateReady) stateView.setText(JSON.stringify({ visibility, sortKey })) }
+        function saveState() { if (stateReady) stateView.setText(JSON.stringify({ visibility, sortKey, newLocal: store.newLocal })) }
         onVisibilityChanged: saveState()
         onSortKeyChanged: saveState()
+        Connections { target: gs.store; function onNewLocalChanged() { gs.saveState() } }
         FileView { id: stateView; path: gs.stateFile; blockLoading: true; atomicWrites: true; printErrors: false }
         Component.onCompleted: {
             Qt.callLater(() => { if (gs.mode === "list") filterInput.forceActiveFocus() })   // type to filter right away
             try {
                 const j = JSON.parse(stateView.text());
-                if (["all", "public", "secret"].includes(j.visibility)) gs.visibility = j.visibility;
+                if (["all", "public", "secret", "local"].includes(j.visibility)) gs.visibility = j.visibility;
+                if (typeof j.newLocal === "boolean") store.newLocal = j.newLocal;
                 if (["updated", "created", "name"].includes(j.sortKey)) gs.sortKey = j.sortKey;
             } catch (e) {}
             gs.stateReady = true;
@@ -373,19 +447,20 @@ WidgetBase {
         function copy(text, what) { Quickshell.clipboardText = text; flash(what) }
 
         // ---- list: draft rows (new gists, or drafts of gists deleted on GitHub) first, then gists. All words must match.
-        readonly property var hay: store.gists.map(g => ({
+        readonly property var hay: store.allGists.map(g => ({
             meta: `${g.description} ${g.id} ${g.files.map(f => f.filename + " " + f.language).join(" ")}`.toLowerCase(),
             content: g.files.map(f => f.content.toLowerCase())
         }))
         readonly property var entries: {
             const words = query.trim().toLowerCase().split(/\s+/).filter(w => w !== "");
             const drafts = store.drafts, out = [];
-            if (visibility === "all" || visibility === "drafts") {
+            if (visibility === "all" || visibility === "drafts" || visibility === "local") {
                 const rows = [];
                 for (const k in drafts) {
                     const d = drafts[k];
                     const orphan = d.mode === "edit" && !store.gistById(d.id);
                     if (d.mode !== "create" && !orphan) continue;
+                    if (visibility === "local" && !d.local) continue;
                     const h = `${d.desc} ${d.files.map(f => f.name + " " + f.content).join(" ")}`.toLowerCase();
                     if (words.every(w => h.includes(w))) rows.push({ type: "draft", d: d, orphan: orphan });
                 }
@@ -393,9 +468,10 @@ WidgetBase {
                 out.push(...rows);
             }
             const gistRows = [];
-            store.gists.forEach((g, gi) => {
-                if (visibility === "public" && !g.public) return;
-                if (visibility === "secret" && g.public) return;
+            store.allGists.forEach((g, gi) => {
+                if (visibility === "public" && (g.local || !g.public)) return;
+                if (visibility === "secret" && (g.local || g.public)) return;
+                if (visibility === "local" && !g.local) return;
                 if (visibility === "drafts" && !drafts[g.id]) return;
                 const h = hay[gi];
                 if (!h) return;
@@ -419,8 +495,8 @@ WidgetBase {
         }
 
         // ---- navigation
-        function openGist(id) { selectedId = id; confirmDelete = false; mode = "view"; Qt.callLater(() => keyScope.forceActiveFocus()) }
-        function toList() { mode = "list"; selectedId = ""; confirmDelete = false; Qt.callLater(() => filterInput.forceActiveFocus()) }
+        function openGist(id) { selectedId = id; confirmDelete = false; confirmUpload = false; mode = "view"; Qt.callLater(() => keyScope.forceActiveFocus()) }
+        function toList() { mode = "list"; selectedId = ""; confirmDelete = false; confirmUpload = false; Qt.callLater(() => filterInput.forceActiveFocus()) }
         function openEntry(e) { if (e.type === "draft") openDraft(e.d.key); else openGist(e.g.id) }
         function enterEditor() { formError = ""; overwriteArmed = false; confirmDelete = false; draftGen++; mode = "editor" }
         function startCreate() {
@@ -447,8 +523,9 @@ WidgetBase {
             if (menuGist) { menuGist = null; return; }
             if (confirmDiscardKey !== "") { confirmDiscardKey = ""; return; }
             if (confirmDelete) { confirmDelete = false; return; }
+            if (confirmUpload) { confirmUpload = false; return; }
             if (mode === "editor") { if (!store.busy) leaveEditor(); }
-            else if (mode === "view") toList();
+            else if (mode === "view" || mode === "settings") toList();
             else if (query !== "") filterInput.text = "";
             else root.close();
         }
@@ -472,7 +549,7 @@ WidgetBase {
                 const f = d.get(i);
                 if (seen[f.name]) { formError = Translation.tr("Two files are named \"%1\".").arg(f.name); return; }
                 seen[f.name] = true;
-                if (!f.locked && f.content.trim() === "") { formError = Translation.tr("\"%1\" is empty; GitHub doesn't allow empty files.").arg(f.name); return; }
+                if (!store.draftLocal && !f.locked && f.content.trim() === "") { formError = Translation.tr("\"%1\" is empty; GitHub doesn't allow empty files.").arg(f.name); return; }
                 if (store.draftMode === "create" || f.orig === "") { files[f.name] = { content: f.content }; continue; }
                 const e = {};   // only what you changed: files you didn't touch keep whatever GitHub has
                 if (f.name !== f.orig) e.filename = f.name;
@@ -480,6 +557,16 @@ WidgetBase {
                 if (Object.keys(e).length) files[f.orig] = e;
             }
             for (const r of store.removedFiles) files[r] = null;
+            if (store.draftLocal) {   // local note: files on disk, same payload shape as GitHub
+                const lp = { description: store.draftDesc, files: files };
+                store.publish(["local", "save", store.localDir].concat(store.draftMode === "create" ? [] : [store.draftId]), JSON.stringify(lp), (ok, id) => {
+                    if (!ok) return;
+                    overwriteArmed = false;
+                    if (mode === "editor") selectedId = id;
+                    flash(Translation.tr("Saved to %1").arg(store.localDir));
+                });
+                return;
+            }
             if (store.draftMode === "create") {
                 store.publish(["create"], JSON.stringify({ description: store.draftDesc, public: store.draftPublic, files: files }), (ok, id) => {
                     if (!ok) return;
@@ -490,7 +577,9 @@ WidgetBase {
             }
             if (current && store.draftBase !== "" && current.updated_at !== store.draftBase && !overwriteArmed) {
                 overwriteArmed = true;
-                formError = Translation.tr("This gist changed on GitHub (%1) after you started editing. Save again to apply your changes; files you edited replace the GitHub versions.").arg(ago(current.updated_at));
+                formError = current.local
+                    ? Translation.tr("This note changed on disk (%1) after you started editing. Save again to apply your changes; files you edited replace the versions on disk.").arg(ago(current.updated_at))
+                    : Translation.tr("This gist changed on GitHub (%1) after you started editing. Save again to apply your changes; files you edited replace the GitHub versions.").arg(ago(current.updated_at));
                 return;
             }
             const payload = { description: store.draftDesc };
@@ -502,11 +591,24 @@ WidgetBase {
             });
         }
         function remove() {
+            const wasLocal = !!current?.local;
             store.removeGist(selectedId, ok => {
                 if (!ok) { confirmDelete = false; return; }
-                toList(); flash(Translation.tr("Gist deleted"));
+                toList(); flash(wasLocal ? Translation.tr("Note moved to the trash") : Translation.tr("Gist deleted"));
             });
         }
+        function upload(isPublic) {
+            if (store.drafts[selectedId]) { confirmUpload = false; flash(Translation.tr("Save or discard your unsaved changes first")); return; }
+            store.upload(selectedId, isPublic, (ok, id) => {
+                confirmUpload = false;
+                if (!ok) return;
+                if (mode === "view") selectedId = id;
+                flash(Translation.tr("Uploaded as a gist · link copied"));
+            });
+        }
+        function openPath(p) { Qt.openUrlExternally("file://" + p) }
+        // a one-file note is the file itself (html_url = raw_url): open the folder it is in
+        function openFolder(g) { const p = g.files.length && g.files[0].raw_url === g.html_url ? g.html_url.slice(0, g.html_url.lastIndexOf("/")) : g.html_url; openPath(p) }
         function addFile() { store.draft.append({ orig: "", name: "", content: "", origContent: "", locked: false }); store.touchDraft() }
         function removeFile(i) {
             const o = store.draft.get(i).orig;
@@ -622,6 +724,7 @@ WidgetBase {
             property string placeholder
             property bool mono: false
             signal edited(string text)
+            signal accepted()
             Layout.fillWidth: true
             implicitHeight: 38
             radius: Appearance.rounding.small
@@ -637,6 +740,7 @@ WidgetBase {
                 clip: true
                 cursorDelegate: Component { Caret {} }
                 onTextChanged: fld.edited(text)
+                onAccepted: fld.accepted()
                 StyledText {
                     visible: fieldInput.text === ""
                     anchors.verticalCenter: parent.verticalCenter
@@ -711,6 +815,7 @@ WidgetBase {
                         text: gs.mode === "editor" ? (gs.store.draftMode === "create" ? Translation.tr("New gist")
                                                          : gs.current ? gs.title(gs.current) : Translation.tr("Edit gist"))
                             : gs.mode === "view" ? (gs.current ? gs.title(gs.current) : Translation.tr("Gist"))
+                            : gs.mode === "settings" ? Translation.tr("Settings")
                             : Translation.tr("Gists")
                         font.pixelSize: Appearance.font.pixelSize.larger
                         font.weight: Font.Medium
@@ -723,14 +828,16 @@ WidgetBase {
                             ? (gs.store.syncing ? Translation.tr("Syncing…")
                                : gs.store.syncError !== "" ? Translation.tr("Sync failed · showing cached gists")
                                : `${gs.store.gists.length} ${Translation.tr("gists")}`
+                                 + (gs.store.localGists.length ? ` · ${gs.store.localGists.length} ${Translation.tr("local")}` : "")
                                  + (gs.store.draftCount ? ` · ${gs.store.draftCount} ${gs.store.draftCount === 1 ? Translation.tr("draft") : Translation.tr("drafts")}` : "")
                                  + (gs.store.lastSync ? ` · ${Translation.tr("synced")} ${gs.ago(gs.store.lastSync)}` : ""))
                             : gs.mode === "editor"
-                                ? (gs.store.draftMode === "create" ? Translation.tr("Not on GitHub until you create it")
-                                   : !gs.current ? Translation.tr("This gist no longer exists on GitHub")
-                                   : `${Translation.tr("Editing")} · ${gs.current.public ? Translation.tr("Public") : Translation.tr("Secret")}`)
+                                ? (gs.store.draftMode === "create" ? (gs.store.draftLocal ? Translation.tr("Saved as files in %1").arg(gs.store.localDir) : Translation.tr("Not on GitHub until you create it"))
+                                   : !gs.current ? (gs.store.draftLocal ? Translation.tr("This note no longer exists on disk") : Translation.tr("This gist no longer exists on GitHub"))
+                                   : `${Translation.tr("Editing")} · ${gs.current.local ? Translation.tr("Local") : gs.current.public ? Translation.tr("Public") : Translation.tr("Secret")}`)
+                            : gs.mode === "settings" ? Translation.tr("Where local notes and drafts are kept")
                             : gs.current
-                                ? `${gs.current.public ? Translation.tr("Public") : Translation.tr("Secret")} · ${gs.current.files.length} ${gs.current.files.length === 1 ? Translation.tr("file") : Translation.tr("files")} · ${Translation.tr("updated")} ${gs.ago(gs.current.updated_at)}`
+                                ? `${gs.current.local ? Translation.tr("Local") : gs.current.public ? Translation.tr("Public") : Translation.tr("Secret")} · ${gs.current.files.length} ${gs.current.files.length === 1 ? Translation.tr("file") : Translation.tr("files")} · ${Translation.tr("updated")} ${gs.ago(gs.current.updated_at)}`
                                 : ""
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: gs.mode === "list" && gs.store.syncError !== "" ? "#ef5350" : Appearance.colors.colSubtext
@@ -743,17 +850,25 @@ WidgetBase {
                     visible: gs.mode === "list"
                     symbol: "sync"; tip: gs.store.syncing ? Translation.tr("Syncing…") : Translation.tr("Sync now")
                     enabled: !gs.store.syncing
-                    onClicked: gs.store.sync()
+                    onClicked: { gs.store.sync(); gs.store.scanLocal(); }
                 }
+                IconBtn { visible: gs.mode === "list"; symbol: "settings"; tip: Translation.tr("Settings"); onClicked: { gs.mode = "settings"; Qt.callLater(() => keyScope.forceActiveFocus()) } }
                 // view actions
-                IconBtn { visible: gs.mode === "view" && !!gs.current; symbol: "link"; tip: Translation.tr("Copy link"); onClicked: gs.copy(gs.current.html_url, Translation.tr("Link copied")) }
-                IconBtn { visible: gs.mode === "view" && !!gs.current; symbol: "open_in_new"; tip: Translation.tr("Open on GitHub"); onClicked: Qt.openUrlExternally(gs.current.html_url) }
+                IconBtn { visible: gs.mode === "view" && !!gs.current && !gs.current.local; symbol: "link"; tip: Translation.tr("Copy link"); onClicked: gs.copy(gs.current.html_url, Translation.tr("Link copied")) }
+                IconBtn { visible: gs.mode === "view" && !!gs.current && !gs.current.local; symbol: "open_in_new"; tip: Translation.tr("Open on GitHub"); onClicked: Qt.openUrlExternally(gs.current.html_url) }
+                IconBtn { visible: gs.mode === "view" && !!gs.current && !!gs.current.local; symbol: "folder_open"; tip: Translation.tr("Show in folder"); onClicked: gs.openFolder(gs.current) }
+                IconBtn {
+                    visible: gs.mode === "view" && !!gs.current && !!gs.current.local
+                    symbol: "cloud_upload"; tip: Translation.tr("Upload to GitHub as a gist")
+                    enabled: !gs.store.busy
+                    onClicked: { gs.confirmDelete = false; gs.confirmUpload = true; }
+                }
                 IconBtn {
                     visible: gs.mode === "view" && !!gs.current
                     symbol: "edit"; tip: gs.store.drafts[gs.selectedId] ? Translation.tr("Continue your draft") : Translation.tr("Edit")
                     onClicked: gs.startEdit(gs.current)
                 }
-                IconBtn { visible: gs.mode === "view" && !!gs.current; symbol: "delete"; tip: Translation.tr("Delete"); iconColor: "#ef5350"; onClicked: gs.confirmDelete = true }
+                IconBtn { visible: gs.mode === "view" && !!gs.current; symbol: "delete"; tip: Translation.tr("Delete"); iconColor: "#ef5350"; onClicked: { gs.confirmUpload = false; gs.confirmDelete = true; } }
                 // editor actions; Save is the primary action, top right
                 IconBtn { visible: gs.mode === "editor"; symbol: "content_paste"; tip: Translation.tr("Paste clipboard into a file"); onClicked: pasteProc.running = true }
                 IconBtn { visible: gs.mode === "editor"; symbol: "note_add"; tip: Translation.tr("Add file"); onClicked: gs.addFile() }
@@ -778,12 +893,12 @@ WidgetBase {
                         id: saveRow
                         spacing: 4
                         MaterialSymbol {
-                            text: gs.store.draftMode === "create" ? "cloud_upload" : "save"
+                            text: gs.store.draftMode === "create" && !gs.store.draftLocal ? "cloud_upload" : "save"
                             iconSize: Appearance.font.pixelSize.larger
                             color: saveBtn.ready ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
                         }
                         StyledText {
-                            text: gs.store.busy ? Translation.tr("Saving…") : gs.store.draftMode === "create" ? Translation.tr("Create") : Translation.tr("Save")
+                            text: gs.store.busy ? Translation.tr("Saving…") : gs.store.draftMode === "create" && !gs.store.draftLocal ? Translation.tr("Create") : Translation.tr("Save")
                             font.weight: Font.Medium
                             color: saveBtn.ready ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
                         }
@@ -799,7 +914,7 @@ WidgetBase {
 
             ConfirmBar {
                 visible: gs.confirmDelete && gs.mode === "view"
-                text: Translation.tr("Delete this gist on GitHub? This can't be undone.")
+                text: gs.current?.local ? Translation.tr("Move this note to the trash?") : Translation.tr("Delete this gist on GitHub? This can't be undone.")
                 action: gs.store.busy ? Translation.tr("Deleting…") : Translation.tr("Delete")
                 busy: gs.store.busy
                 onConfirmed: gs.remove()
@@ -809,11 +924,83 @@ WidgetBase {
                 readonly property var d: gs.store.drafts[gs.confirmDiscardKey] ?? null
                 readonly property bool isNew: d ? d.mode === "create" : gs.store.draftMode === "create"
                 visible: gs.confirmDiscardKey !== ""
-                text: isNew ? Translation.tr("Discard this draft? It was never saved to GitHub.")
+                readonly property bool isLocal: d ? !!d.local : gs.store.draftLocal
+                text: isNew ? (isLocal ? Translation.tr("Discard this draft? It was never saved.") : Translation.tr("Discard this draft? It was never saved to GitHub."))
+                            : isLocal ? Translation.tr("Discard your unsaved changes? The note on disk stays as it is.")
                             : Translation.tr("Discard your unsaved changes? The gist on GitHub stays as it is.")
                 action: Translation.tr("Discard")
                 onConfirmed: gs.discard(gs.confirmDiscardKey)
                 onCancelled: gs.confirmDiscardKey = ""
+            }
+
+            Rectangle {  // upload a local note: pick the visibility
+                visible: gs.confirmUpload && gs.mode === "view"
+                Layout.fillWidth: true
+                implicitHeight: upRow.implicitHeight + 16
+                radius: Appearance.rounding.small
+                color: Appearance.colors.colSecondaryContainer
+                RowLayout {
+                    id: upRow
+                    anchors { fill: parent; margins: 8; leftMargin: 12 }
+                    spacing: 6
+                    StyledText {
+                        Layout.fillWidth: true; wrapMode: Text.Wrap
+                        text: gs.store.busy ? Translation.tr("Uploading…") : Translation.tr("Upload as a new gist? The local note then goes to the trash.")
+                        color: Appearance.colors.colOnSecondaryContainer
+                    }
+                    Chip { label: Translation.tr("Cancel"); onClicked: gs.confirmUpload = false }
+                    Chip { label: Translation.tr("Secret"); active: true; enabled: !gs.store.busy; onClicked: gs.upload(false) }
+                    Chip { label: Translation.tr("Public"); enabled: !gs.store.busy; onClicked: gs.upload(true) }
+                }
+            }
+
+            // ---------------- settings ----------------
+            ColumnLayout {
+                id: settingsView
+                visible: gs.mode === "settings"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 6
+                function apply() { gs.store.saveSettings(localField.input.text, draftField.input.text); gs.flash(Translation.tr("Settings saved")) }
+                component SLabel: StyledText { Layout.fillWidth: true; Layout.topMargin: 6; font.weight: Font.Medium; color: Appearance.colors.colOnLayer2 }
+                component SHint: StyledText { Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
+                SLabel { text: Translation.tr("Local notes folder") }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Field {
+                        id: localField; mono: true; placeholder: gs.store.defaultLocalDir
+                        Component.onCompleted: input.text = gs.store.localDir
+                        onAccepted: settingsView.apply()
+                    }
+                    IconBtn { symbol: "folder_open"; tip: Translation.tr("Open folder"); onClicked: gs.openPath(gs.store.localDir) }
+                }
+                SHint { text: Translation.tr("Notes that stay on this computer. Each file is a note, each subfolder a note with several files; files you add here show up too. Upload one to GitHub any time.") }
+                SHint { visible: gs.store.localError !== ""; text: gs.store.localError; color: "#ef5350" }
+                SLabel { text: Translation.tr("Drafts folder") }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Field {
+                        id: draftField; mono: true; placeholder: gs.store.defaultDraftDir
+                        Component.onCompleted: input.text = gs.store.draftDir
+                        onAccepted: settingsView.apply()
+                    }
+                    IconBtn { symbol: "folder_open"; tip: Translation.tr("Open folder"); onClicked: gs.openPath(gs.store.draftDir) }
+                }
+                SHint { text: Translation.tr("Unsaved changes to gists and notes (drafts-<screen>.json). Changing it moves your current drafts there.") }
+                SLabel { text: Translation.tr("New notes") }
+                RowLayout {
+                    spacing: 4
+                    Chip { label: Translation.tr("Local"); active: gs.store.newLocal; onClicked: gs.store.newLocal = true }
+                    Chip { label: Translation.tr("GitHub gist"); active: !gs.store.newLocal; onClicked: gs.store.newLocal = false }
+                }
+                SHint { text: Translation.tr("What + and Ctrl+N create first; you can switch in the editor.") }
+                RowLayout {
+                    Layout.topMargin: 8
+                    Item { Layout.fillWidth: true }
+                    Chip { label: Translation.tr("Defaults"); onClicked: { localField.input.text = gs.store.defaultLocalDir; draftField.input.text = gs.store.defaultDraftDir } }
+                    Chip { label: Translation.tr("Save"); active: true; onClicked: settingsView.apply() }
+                }
+                Item { Layout.fillHeight: true }
             }
 
             // ---------------- list ----------------
@@ -855,6 +1042,7 @@ WidgetBase {
                 Chip { label: Translation.tr("All"); active: gs.visibility === "all"; onClicked: gs.visibility = "all" }
                 Chip { label: Translation.tr("Public"); active: gs.visibility === "public"; onClicked: gs.visibility = "public" }
                 Chip { label: Translation.tr("Secret"); active: gs.visibility === "secret"; onClicked: gs.visibility = "secret" }
+                Chip { label: Translation.tr("Local"); active: gs.visibility === "local"; onClicked: gs.visibility = "local" }
                 Chip {
                     visible: gs.store.draftCount > 0 || gs.visibility === "drafts"
                     label: Translation.tr("Drafts")
@@ -908,7 +1096,7 @@ WidgetBase {
                     onClicked: gs.openEntry(modelData)
                     altAction: () => {
                         if (rowBtn.isDraft) { gs.confirmDiscardKey = rowBtn.d.key; return; }
-                        const p = rowBtn.mapToItem(gs, rowBtn.width - 220, rowBtn.height / 2);
+                        const p = rowBtn.mapToItem(gs, rowBtn.width - 240, rowBtn.height / 2);
                         gs.menuX = p.x; gs.menuY = p.y; gs.menuGist = rowBtn.g;
                     }
                     contentItem: RowLayout {
@@ -917,9 +1105,9 @@ WidgetBase {
                             Layout.alignment: Qt.AlignTop
                             Layout.topMargin: 2
                             Layout.leftMargin: 4
-                            text: rowBtn.isDraft ? "edit_note" : rowBtn.g.public ? "public" : "lock"
+                            text: rowBtn.isDraft ? "edit_note" : rowBtn.g.local ? "hard_drive" : rowBtn.g.public ? "public" : "lock"
                             iconSize: Appearance.font.pixelSize.larger
-                            color: rowBtn.isDraft ? Appearance.colors.colTertiary : rowBtn.g.public ? Appearance.colors.colSubtext : Appearance.colors.colPrimary
+                            color: rowBtn.isDraft ? Appearance.colors.colTertiary : rowBtn.g.local ? Appearance.colors.colTertiary : rowBtn.g.public ? Appearance.colors.colSubtext : Appearance.colors.colPrimary
                         }
                         ColumnLayout {
                             id: rowCol
@@ -941,7 +1129,7 @@ WidgetBase {
                             StyledText {
                                 Layout.fillWidth: true
                                 text: rowBtn.isDraft
-                                    ? `${rowBtn.modelData.orphan ? Translation.tr("Gist deleted on GitHub") : Translation.tr("New gist")} · ${Translation.tr("saved on this computer")} ${gs.ago(rowBtn.d.savedAt)}`
+                                    ? `${rowBtn.modelData.orphan ? (rowBtn.d.local ? Translation.tr("Note deleted on disk") : Translation.tr("Gist deleted on GitHub")) : rowBtn.d.local ? Translation.tr("New local note") : Translation.tr("New gist")} · ${Translation.tr("saved on this computer")} ${gs.ago(rowBtn.d.savedAt)}`
                                     : `${rowBtn.g.files.map(f => f.filename).join(", ")} · ${gs.ago(rowBtn.g.updated_at)}`
                                       + (rowBtn.d ? ` · ${Translation.tr("unsaved changes")} ${gs.ago(rowBtn.d.savedAt)}` : "")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
@@ -998,7 +1186,8 @@ WidgetBase {
                         wrapMode: Text.Wrap
                         color: Appearance.colors.colSubtext
                         text: gs.visibility === "drafts" ? Translation.tr("No drafts")
-                            : gs.store.gists.length > 0 ? Translation.tr("No gists match")
+                            : gs.visibility === "local" && gs.store.localGists.length === 0 ? Translation.tr("No local notes in %1 yet. Press + to write one, or change the folder in Settings.").arg(gs.store.localDir)
+                            : gs.store.allGists.length > 0 ? Translation.tr("No gists match")
                             : gs.store.syncing ? Translation.tr("Loading your gists…")
                             : gs.store.syncError !== "" ? gs.store.syncError
                             : Translation.tr("No gists yet. Press + or Ctrl+N to create one.")
@@ -1023,7 +1212,7 @@ WidgetBase {
                     StyledText {
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
-                        text: Translation.tr("Unsaved changes (%1), compared with GitHub below.").arg(gs.ago(viewDraft.d?.savedAt ?? ""))
+                        text: (gs.current?.local ? Translation.tr("Unsaved changes (%1), compared with the file on disk below.") : Translation.tr("Unsaved changes (%1), compared with GitHub below.")).arg(gs.ago(viewDraft.d?.savedAt ?? ""))
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colOnTertiaryContainer
                     }
@@ -1122,7 +1311,12 @@ WidgetBase {
                         LangChip { text: fileItem.modelData.language }
                         StyledText { text: gs.fmtSize(fileItem.modelData.size); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
                         IconBtn { symbol: "content_copy"; tip: Translation.tr("Copy file"); onClicked: gs.copy(fileItem.modelData.content, Translation.tr("File copied")) }
-                        IconBtn { symbol: "code"; tip: Translation.tr("Copy raw URL (for curl)"); onClicked: gs.copy(fileItem.modelData.raw_url, Translation.tr("Raw URL copied")) }
+                        IconBtn {
+                            readonly property bool local: !!gs.current?.local
+                            symbol: local ? "file_open" : "code"; tip: local ? Translation.tr("Open file (right-click: copy path)") : Translation.tr("Copy raw URL (for curl)")
+                            altAction: () => gs.copy(fileItem.modelData.raw_url, Translation.tr("Path copied"))
+                            onClicked: local ? gs.openPath(fileItem.modelData.raw_url) : gs.copy(fileItem.modelData.raw_url, Translation.tr("Raw URL copied"))
+                        }
                     }
                     Rectangle {
                         Layout.fillWidth: true
@@ -1148,7 +1342,7 @@ WidgetBase {
                         visible: fileItem.modelData.truncated || fileItem.modelData.clipped
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
-                        text: Translation.tr("Only the start of this file is shown; open it on GitHub for the rest.")
+                        text: gs.current?.local ? Translation.tr("Only the start of this file is shown; open the file for the rest.") : Translation.tr("Only the start of this file is shown; open it on GitHub for the rest.")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: "#ffb300"
                     }
@@ -1157,7 +1351,7 @@ WidgetBase {
                     anchors.centerIn: parent
                     visible: !gs.current
                     color: Appearance.colors.colSubtext
-                    text: gs.store.busy || gs.store.syncing ? Translation.tr("Loading…") : Translation.tr("This gist no longer exists")
+                    text: gs.store.busy || gs.store.syncing ? Translation.tr("Loading…") : Translation.tr("This gist or note no longer exists")
                 }
             }
 
@@ -1193,13 +1387,16 @@ WidgetBase {
                         Layout.fillWidth: true
                         spacing: 4
                         readonly property bool isNew: gs.store.draftMode === "create"
-                        Chip { visible: visRow.isNew || !gs.store.draftPublic; label: Translation.tr("Secret"); active: !gs.store.draftPublic; onClicked: if (visRow.isNew) { gs.store.draftPublic = false; gs.store.touchDraft(); } }
-                        Chip { visible: visRow.isNew || gs.store.draftPublic; label: Translation.tr("Public"); active: gs.store.draftPublic; onClicked: if (visRow.isNew) { gs.store.draftPublic = true; gs.store.touchDraft(); } }
+                        function pick(local, pub) { if (visRow.isNew) { gs.store.draftLocal = local; gs.store.draftPublic = pub; gs.store.newLocal = local; gs.store.touchDraft(); } }
+                        Chip { visible: visRow.isNew || gs.store.draftLocal; label: Translation.tr("Local"); active: gs.store.draftLocal; onClicked: visRow.pick(true, false) }
+                        Chip { visible: visRow.isNew || (!gs.store.draftLocal && !gs.store.draftPublic); label: Translation.tr("Secret"); active: !gs.store.draftLocal && !gs.store.draftPublic; onClicked: visRow.pick(false, false) }
+                        Chip { visible: visRow.isNew || (!gs.store.draftLocal && gs.store.draftPublic); label: Translation.tr("Public"); active: !gs.store.draftLocal && gs.store.draftPublic; onClicked: visRow.pick(false, true) }
                         StyledText {
                             Layout.fillWidth: true
                             Layout.leftMargin: 6
                             wrapMode: Text.Wrap
-                            text: !visRow.isNew ? Translation.tr("GitHub can't change a gist's visibility after creation.")
+                            text: gs.store.draftLocal ? (visRow.isNew ? Translation.tr("Only on this computer; upload it to GitHub later.") : Translation.tr("Only on this computer; upload it from the note's view."))
+                                : !visRow.isNew ? Translation.tr("GitHub can't change a gist's visibility after creation.")
                                 : gs.store.draftPublic ? Translation.tr("Listed on your profile and searchable.")
                                 : Translation.tr("Unlisted: only people with the link can see it.")
                             font.pixelSize: Appearance.font.pixelSize.smaller
@@ -1243,7 +1440,7 @@ WidgetBase {
                                 border.color: Appearance.colors.colPrimary
                                 StyledTextArea {
                                     id: area
-                                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: 2 }
+                                    anchors { fill: parent; margins: 2 }   // the whole box takes clicks, not just the written lines
                                     readOnly: fileEd.locked
                                     wrapMode: TextEdit.WrapAnywhere
                                     textFormat: TextEdit.PlainText
@@ -1263,7 +1460,8 @@ WidgetBase {
                                 visible: fileEd.locked
                                 Layout.fillWidth: true
                                 wrapMode: Text.Wrap
-                                text: Translation.tr("Too large to edit here (only the start was loaded); you can rename or remove it.")
+                                text: gs.store.draftLocal ? Translation.tr("Too large to edit here (only the start was loaded); you can rename or remove it, or edit the file directly.")
+                                                          : Translation.tr("Too large to edit here (only the start was loaded); you can rename or remove it.")
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 color: "#ffb300"
                             }
@@ -1286,8 +1484,9 @@ WidgetBase {
                             ? (gs.store.savedAt !== "" ? Translation.tr("Unsaved changes · draft kept on this computer (%1)").arg(gs.ago(gs.store.savedAt))
                                                          : Translation.tr("Unsaved changes"))
                               + " · " + Translation.tr("Esc goes back and keeps the draft")
-                            : gs.store.draftMode === "edit" ? Translation.tr("No unsaved changes") : Translation.tr("Ctrl+S creates the gist"))
+                            : gs.store.draftMode === "edit" ? Translation.tr("No unsaved changes") : gs.store.draftLocal ? Translation.tr("Ctrl+S saves the note") : Translation.tr("Ctrl+S creates the gist"))
                     : gs.mode === "list" ? Translation.tr("Enter opens the first match · Ctrl+N new · right-click a gist for actions")
+                    : gs.mode === "settings" ? Translation.tr("Enter in a field saves · Esc goes back")
                     : Translation.tr("Select text to copy part of a file · Esc goes back")
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 color: isError ? "#ef5350" : gs.notice !== "" ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
@@ -1305,7 +1504,7 @@ WidgetBase {
             visible: gs.menuGist !== null
             x: Math.max(8, Math.min(gs.menuX, gs.width - width - 8))
             y: Math.max(8, Math.min(gs.menuY, gs.height - height - 8))
-            width: 220
+            width: 240
             implicitHeight: ctxCol.implicitHeight + 12
             height: implicitHeight
             radius: Appearance.rounding.normal
@@ -1317,7 +1516,13 @@ WidgetBase {
                 anchors { fill: parent; margins: 6 }
                 spacing: 2
                 Repeater {
-                    model: [
+                    model: gs.menuGist?.local ? [
+                        { icon: "content_copy", label: Translation.tr("Copy content"), act: "copy" },
+                        { icon: "folder_open", label: Translation.tr("Show in folder"), act: "folder" },
+                        { icon: "cloud_upload", label: Translation.tr("Upload to GitHub…"), act: "upload" },
+                        { icon: "edit", label: gs.store.drafts[gs.menuGist.id] ? Translation.tr("Continue draft") : Translation.tr("Edit"), act: "edit" },
+                        { icon: "delete", label: Translation.tr("Move to trash…"), act: "delete", danger: true },
+                    ] : [
                         { icon: "link", label: Translation.tr("Copy link"), act: "link" },
                         { icon: "content_copy", label: Translation.tr("Copy content"), act: "copy" },
                         { icon: "open_in_new", label: Translation.tr("Open on GitHub"), act: "web" },
@@ -1339,6 +1544,8 @@ WidgetBase {
                             else if (modelData.act === "copy") gs.copy(gs.allContent(g), Translation.tr("Content copied"));
                             else if (modelData.act === "web") Qt.openUrlExternally(g.html_url);
                             else if (modelData.act === "edit") gs.startEdit(g);
+                            else if (modelData.act === "folder") gs.openFolder(g);
+                            else if (modelData.act === "upload") { gs.openGist(g.id); gs.confirmUpload = true; }
                             else { gs.openGist(g.id); gs.confirmDelete = true; }
                         }
                         contentItem: RowLayout {

@@ -6,6 +6,8 @@
 #   update ID < payload  PATCH /gists/ID (payload: {description, files: {name: {content} | {filename, content} | null}}); prints "ID URL UPDATED_AT"
 #   delete ID            DELETE /gists/ID
 #   clip                 secret gist from the clipboard; copies its URL and notifies
+#   upload DIR ID PUB    upload local note ID (gist-local.py, PUB: public|secret) as a new gist, then move the note to the trash;
+#                        prints "ID URL UPDATED_AT"
 # The cache is $XDG_CACHE_HOME/gist-widget/{g/<id>.json, index.json}; index.json (newest first, file contents clipped
 # at 200 KB) is what the widget reads. It is rewritten only when it changes, so an idle sync doesn't reset the popup.
 set -euo pipefail
@@ -78,5 +80,14 @@ case "${1:-}" in
     notify-send -a Gist "Secret gist created" "$url (link copied)"
     created
     ;;
-  *) echo "usage: $0 sync|create|update ID|delete ID|clip" >&2; exit 2 ;;
+  upload)
+    [[ $# -eq 4 ]] || { echo "usage: $0 upload DIR ID public|secret" >&2; exit 2; }
+    local_py="$(dirname "$0")/gist-local.py"
+    payload=$(python3 "$local_py" payload "$2" "$3" "$4")
+    resp=$(gh api -X POST /gists --input - <<<"$payload")
+    store "$resp"; index
+    python3 "$local_py" delete "$2" "$3" || echo "uploaded, but the local note could not be removed" >&2
+    created
+    ;;
+  *) echo "usage: $0 sync|create|update ID|delete ID|clip|upload DIR ID PUB" >&2; exit 2 ;;
 esac

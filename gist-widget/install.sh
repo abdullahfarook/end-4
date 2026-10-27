@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Gist widget: bar button + popup for your GitHub gists (list/filter, view, create, edit, delete, secret gist from clipboard),
+# Gist widget: bar button + popup for your GitHub gists and local notes (list/filter, view, create, edit, delete, secret gist from
+# clipboard, upload a local note as a gist), gists
 # synced in the background into a local cache by gist-widget.sh through `gh api` (idempotent). Needs: github-cli (logged in, `gist` scope), jq, wl-clipboard.
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
@@ -16,6 +17,7 @@ done
 install -Dm644 "$REPO/GistButton.qml" "$Q/modules/ii/bar/GistButton.qml"
 rm -f "$Q/modules/ii/bar/GistPopup.qml"   # merged into GistButton.qml
 install -Dm755 "$REPO/gist-widget.sh" "$SCRIPT"
+install -Dm755 "$REPO/gist-local.py" "$(dirname "$SCRIPT")/gist-local.py"
 install -Dm644 "$REPO/icons/github-symbolic.svg" "$Q/assets/icons/github-symbolic.svg"
 python3 - "$BAR" <<'PY'
 import re, sys
