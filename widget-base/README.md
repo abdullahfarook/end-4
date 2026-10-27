@@ -20,7 +20,7 @@ There are two kinds of panels:
 5. **Esc closes** a shell panel (first closing whatever is open inside it: a menu, a thread, a sub-view). Window panels keep Esc for the app.
 6. **Nothing runs while closed**: shell panel content is created on open and destroyed on close; data that must survive lives on the button.
 7. **Right-click menu**: the widget gives only the entries; placement and closing are shared.
-8. The window **close-button overlay** (`close-button/`) opening never closes a panel.
+8. The window **close-button overlay** (`shell-extras/CloseButton.qml`) opening never closes a panel.
 
 ## Shell panels: `WidgetBase.qml`
 

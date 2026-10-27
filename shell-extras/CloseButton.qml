@@ -1,4 +1,3 @@
-//@ pragma UseQApplication
 // Breeze-style window buttons (drag / maximize / close) drawn by the shell for windows whose app has no
 // buttons of its own. Idle: small handle at the top-centre of the window; hover: a drawer slides down with
 // three circles. The grip circle drags the window: drop on the left/right screen edge to send it to the
@@ -10,7 +9,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
-ShellRoot {
+Scope {
     id: root
 
     readonly property var noCloseClasses: ["org.kde.dolphin", "org.kde.konsole", "kitty", "org.kde.kate",

@@ -7,7 +7,7 @@ import Quickshell.Hyprland
 // After a workspace switch to an empty workspace, grab the keyboard for a short window; the first
 // printable key opens the launcher search with that text. After the timeout
 // the grab is released and typing goes to the window as usual.
-ShellRoot {
+Scope {
     id: root
     property bool armed: false
     readonly property int timeoutMs: 2500

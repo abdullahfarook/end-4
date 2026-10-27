@@ -7,7 +7,7 @@ install -Dm755 "$d/teams-watchdog.sh" ~/.config/hypr/custom/teams-watchdog.sh
 cp "$d/config.json" ~/.config/teams-for-linux/config.json
 cp "$d/teams-for-linux.desktop" ~/.config/autostart/
 f=~/.config/hypr/custom/execs.lua
-grep -q teams-for-linux "$f" || cat >> "$f" <<'LUA'
+grep -qE "teams-for-linux|teams-watchdog" "$f" || cat >> "$f" <<'LUA'
 
 -- Teams for Linux: Hyprland doesn't process ~/.config/autostart, so launch it here
 hl.on("hyprland.start", function () hl.exec_cmd("sh -c 'nm-online -q -t 120; for i in $(seq 60); do busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1 && break; sleep 1; done; exec ~/.config/hypr/custom/teams-watchdog.sh'") end)
