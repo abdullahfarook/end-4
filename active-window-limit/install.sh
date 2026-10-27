@@ -22,7 +22,10 @@ block = """
     Item { // active-window-tooltip
         id: hoverArea
         anchors.fill: colLayout
-        readonly property bool containsMouse: hh.hovered && titleText.truncated
+        readonly property bool want: hh.hovered && titleText.truncated
+        property bool containsMouse: false // stays true briefly after leaving, so the popup fades out with a delay
+        onWantChanged: { if (want) { hideTimer.stop(); containsMouse = true } else hideTimer.restart() }
+        Timer { id: hideTimer; interval: 600; onTriggered: hoverArea.containsMouse = false }
         HoverHandler { id: hh }
         StyledPopup {
             hoverTarget: hoverArea
