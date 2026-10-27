@@ -121,6 +121,10 @@ watch)
             p=${ws#special:}; is_panel "$p" && [ "$ws" != "$p" ] && continue    # focus is on a panel itself
             m=$(hyprctl monitors -j | jq -r --argjson i "$wm" '.[] | select(.id == $i) | .name')
             [ -n "$m" ] || continue
+            # focus-follows-mouse while the cursor crosses the bar (window below it gets focus): not a reason to close
+            read -r cx cy < <(hyprctl cursorpos | tr -d ',')
+            hyprctl monitors -j | jq -e --arg m "$m" --argjson x "$cx" --argjson y "$cy" \
+                '.[] | select(.name == $m) | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + 46)' >/dev/null && continue
             p=$(panel_on "$m"); [ -n "$p" ] && is_panel "$p" && hide "$p" ;;
         esac
     done ;;

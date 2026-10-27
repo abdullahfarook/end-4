@@ -28,13 +28,17 @@ if [ -z "${a:-}" ] || [ "$a" = null ]; then
     done
     [ -n "${a:-}" ] && [ "$a" != null ] || exit 0
 fi
-if [ "$ws" != "special:teams" ]; then
+# Teams (X11) restores its own saved geometry after mapping: set the panel geometry every time before it is shown
+place() {
     read -r mw mh mx my < <(hyprctl monitors -j | jq -r '.[]|select(.focused)|"\(.width) \(.height) \(.x) \(.y)"')
-    w="address:$a"
-    hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:teams\", window = \"$w\", follow = false })" >/dev/null
+    local w="address:$a"
     hyprctl dispatch "hl.dsp.window.float({ action = \"enable\", window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.resize({ x = $W, y = $((mh - 58)), relative = false, window = \"$w\" })" >/dev/null
     hyprctl dispatch "hl.dsp.window.move({ x = $((mx + LEFT)), y = $((my + TOP)), relative = false, window = \"$w\" })" >/dev/null
+}
+if [ "$ws" != "special:teams" ]; then
+    hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:teams\", window = \"address:$a\", follow = false })" >/dev/null
+    place
     [ $dock = 1 ] && exit 0
     sleep 0.3
     "$P" stamp teams
@@ -42,5 +46,5 @@ if [ "$ws" != "special:teams" ]; then
 else
     [ $dock = 1 ] && exit 0
     if here; then "$P" hide teams force   # shown on this monitor: hide
-    else "$P" stamp teams; hyprctl dispatch 'hl.dsp.workspace.toggle_special("teams")' >/dev/null; fi   # hidden or on another monitor: show here
+    else "$P" stamp teams; place; hyprctl dispatch 'hl.dsp.workspace.toggle_special("teams")' >/dev/null; fi   # hidden or on another monitor: show here
 fi
