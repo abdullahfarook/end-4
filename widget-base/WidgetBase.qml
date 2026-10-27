@@ -119,8 +119,9 @@ RippleButton {
                     if (Date.now() - panel.openedAt < 600) return;   // our own layers opening
                     if (event.name === "activespecial") { const q = event.data.split(","); if (q[0] !== "" && q[1] === panel.popupMon) root.close(); return; }
                     if (event.name === "workspacev2") { wsCheck.restart(); return; }   // decided once Hyprland.monitors has updated
-                    // the window close-button overlay (closebutton config) is not a panel: never a reason to close
+                    // the window close-button overlay (closebutton config) and bar tooltips (StyledPopup) are not panels: never a reason to close
                     if (event.name === "openlayer" && event.data !== "quickshell:popup-dismiss" && event.data !== "quickshell:closebutton"
+                        && event.data !== "quickshell:popup"
                         && !root.ignoredLayers.includes(event.data)
                         && Hyprland.focusedMonitor?.name === panel.popupMon) root.close();
                 }
