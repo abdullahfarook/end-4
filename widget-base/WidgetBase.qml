@@ -86,11 +86,16 @@ RippleButton {
         opacity: root.iconOpacity
     }
 
+    // keep the panel alive briefly after closing: unmapping (not destroying) the layer lets Hyprland play the slide-out
+    onOpenChanged: if (!open) unloadDelay.restart()
+    Timer { id: unloadDelay; interval: 400 }
     Loader {
-        active: root.open && root.panelContent !== null
+        active: (root.open || unloadDelay.running) && root.panelContent !== null
         sourceComponent: Scope {
             id: panel
-            readonly property real openedAt: Date.now()
+            property real openedAt: Date.now()
+            // reopened during the close animation: this instance is reused, so restart the open-time state
+            Connections { target: root; function onOpenChanged() { if (root.open) { panel.openedAt = Date.now(); panel.wsAtOpen = panel.monitor?.activeWorkspace?.id ?? 0 } } }
             // monitor the panel was opened on (frozen at open)
             readonly property string popupMon: root.panelScreen?.name ?? Hyprland.focusedMonitor?.name ?? ""
             readonly property var screen: root.panelScreen
@@ -115,6 +120,7 @@ RippleButton {
             }
             Connections {
                 target: Hyprland
+                enabled: root.open
                 function onRawEvent(event) {
                     if (Date.now() - panel.openedAt < 600) return;   // our own layers opening
                     if (event.name === "activespecial") { const q = event.data.split(","); if (q[0] !== "" && q[1] === panel.popupMon) root.close(); return; }
@@ -133,6 +139,7 @@ RippleButton {
             PanelWindow {
                 id: away
                 screen: panel.screen
+                visible: root.open
                 // Item-based bands around the hole (a Subtract region is unreliable): above, left of, right of and below it
                 mask: Region {
                     item: panel.holed ? aboveHole : belowBar
@@ -159,7 +166,7 @@ RippleButton {
             PanelWindow {
                 id: win
                 screen: panel.screen
-                visible: !(content.item?.panelHidden ?? false)
+                visible: root.open && !(content.item?.panelHidden ?? false)
                 color: "transparent"
                 anchors { top: true; left: true; bottom: true }
                 implicitWidth: root.panelWidth + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin

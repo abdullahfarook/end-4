@@ -28,6 +28,7 @@ if [ -n "$win" ]; then
             [ "$visible" = true ] && exit 0  # it was on screen: moving it away is the hide
         fi
         hyprctl dispatch 'hl.dsp.workspace.toggle_special("ai")' >/dev/null  # show
+        "$P" stamp ai  # re-stamp at the real show: a slow lock/hide before it must not let the focus watcher hide it again
         sleep 0.1; hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null  # make sure typing goes to it
     fi
 else
