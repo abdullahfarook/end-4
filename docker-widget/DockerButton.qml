@@ -69,7 +69,11 @@ WidgetBase {
     panelContent: Component { FocusScope {
         id: dk
         // Esc in the logs view goes back to the list; on the list it falls through to WidgetBase (close)
-        Keys.onEscapePressed: event => { if (dk.selected !== "") dk.selected = ""; else event.accepted = false }
+        Keys.onEscapePressed: event => {
+            if (dk.selected !== "") dk.selected = "";
+            else if (dk.query !== "") filterInput.text = "";
+            else event.accepted = false;
+        }
         property var containers: []        // [{id, name, image, state, status, ports, cpu, mem}]
         property var stats: ({})           // name -> {cpu, mem}
         property string error: ""
@@ -81,9 +85,53 @@ WidgetBase {
         property bool paused: false
         readonly property var current: containers.find(c => c.name === selected) ?? null
 
-        Component.onCompleted: refresh()
+        // ---- list filter (like the Gist panel): words match name, image, status, ports, id; state chips; sort
+        property string query: ""
+        property string stateFilter: "all"   // all | running | stopped
+        property string sortKey: "state"     // state | name | cpu | mem
+        readonly property int runningCount: containers.filter(c => c.state === "running").length
+        function memBytes(m) {
+            const x = /^([\d.]+)\s*([kKMGT]?i?B)$/.exec((m ?? "").trim());
+            if (!x) return 0;
+            const u = { B: 1, kB: 1e3, KB: 1e3, KiB: 1024, MB: 1e6, MiB: 1048576, GB: 1e9, GiB: 1073741824, TB: 1e12, TiB: 1099511627776 };
+            return parseFloat(x[1]) * (u[x[2]] ?? 1);
+        }
+        readonly property var visibleContainers: {
+            const words = query.trim().toLowerCase().split(/\s+/).filter(w => w !== "");
+            const out = containers.filter(c => {
+                if (stateFilter === "running" && c.state !== "running") return false;
+                if (stateFilter === "stopped" && c.state === "running") return false;
+                const h = `${c.name} ${c.image} ${c.state} ${c.status} ${c.ports} ${c.id}`.toLowerCase();
+                return words.every(w => h.includes(w));
+            });
+            const cpu = c => parseFloat(stats[c.name]?.cpu ?? "0") || 0, mem = c => memBytes(stats[c.name]?.mem);
+            if (sortKey === "name") out.sort((a, b) => a.name.localeCompare(b.name));
+            else if (sortKey === "cpu") out.sort((a, b) => cpu(b) - cpu(a) || a.name.localeCompare(b.name));
+            else if (sortKey === "mem") out.sort((a, b) => mem(b) - mem(a) || a.name.localeCompare(b.name));
+            else out.sort((a, b) => (b.state === "running") - (a.state === "running") || a.name.localeCompare(b.name));
+            return out;
+        }
+        // remembered across opens
+        readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/docker-widget.json`
+        property bool stateReady: false
+        function saveState() { if (stateReady) stateView.setText(JSON.stringify({ stateFilter, sortKey })) }
+        onStateFilterChanged: saveState()
+        onSortKeyChanged: saveState()
+        FileView { id: stateView; path: dk.stateFile; blockLoading: true; atomicWrites: true; printErrors: false }
+
+        Component.onCompleted: {
+            try {
+                const j = JSON.parse(stateView.text());
+                if (["all", "running", "stopped"].includes(j.stateFilter)) stateFilter = j.stateFilter;
+                if (["state", "name", "cpu", "mem"].includes(j.sortKey)) sortKey = j.sortKey;
+            } catch (e) {}
+            stateReady = true;
+            refresh();
+            Qt.callLater(() => filterInput.forceActiveFocus());   // type to filter right away
+        }
         Component.onDestruction: { selected = ""; logProc.running = false }
         onSelectedChanged: {
+            if (selected === "") Qt.callLater(() => filterInput.forceActiveFocus());
             logProc.running = false;
             logLines = []; follow = true; paused = false;
             if (selected !== "") {
@@ -102,7 +150,7 @@ WidgetBase {
 
         Process {
             id: psProc
-            command: ["sh", "-c", "systemctl is-active --quiet docker.service && exec docker ps --format '{{json .}}'"]  // is-active first: must not wake the on-demand daemon
+            command: ["sh", "-c", "systemctl is-active --quiet docker.service && exec docker ps -a --format '{{json .}}'"]  // is-active first: must not wake the on-demand daemon
             stdout: StdioCollector {
                 onStreamFinished: {
                     const out = [];
@@ -182,6 +230,23 @@ WidgetBase {
             return Appearance.colors.colSubtext;
         }
 
+        component Chip: RippleButton {
+            id: chip
+            property string label
+            property bool active: false
+            implicitHeight: 26
+            implicitWidth: chipText.implicitWidth + 20
+            buttonRadius: Appearance.rounding.full
+            colBackground: active ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+            colBackgroundHover: active ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+            contentItem: StyledText {
+                id: chipText
+                horizontalAlignment: Text.AlignHCenter
+                text: chip.label
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: chip.active ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
+            }
+        }
         component IconBtn: RippleButton {
             id: ib
             property string symbol
@@ -227,7 +292,7 @@ WidgetBase {
                         text: dk.selected !== ""
                             ? (dk.current ? `${dk.current.image} · ${dk.current.status}` : Translation.tr("Container removed"))
                             : dk.daemonDown ? Translation.tr("Daemon stopped")
-            : `${dk.containers.length} ${Translation.tr("running")}`
+            : `${dk.runningCount} ${Translation.tr("running")}` + (dk.containers.length > dk.runningCount ? ` · ${dk.containers.length - dk.runningCount} ${Translation.tr("stopped")}` : "")
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colSubtext
                         elide: Text.ElideRight
@@ -325,6 +390,66 @@ WidgetBase {
               }
             }
 
+            // Filter + state chips + sort (list only)
+            Rectangle {
+                visible: dk.selected === "" && !dk.daemonDown
+                Layout.fillWidth: true
+                implicitHeight: 40
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colLayer2
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 14; rightMargin: 8 }
+                    spacing: 8
+                    MaterialSymbol { text: "search"; iconSize: Appearance.font.pixelSize.huge; color: Appearance.colors.colSubtext }
+                    StyledTextInput {
+                        id: filterInput
+                        Layout.fillWidth: true
+                        color: Appearance.colors.colOnLayer2
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        clip: true
+                        onTextChanged: dk.query = text
+                        Keys.onReturnPressed: if (dk.visibleContainers.length) dk.selected = dk.visibleContainers[0].name
+                        Keys.onEnterPressed: if (dk.visibleContainers.length) dk.selected = dk.visibleContainers[0].name
+                        StyledText {
+                            visible: filterInput.text === ""
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Translation.tr("Filter by name, image, status or port…")
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                    IconBtn { visible: filterInput.text !== ""; symbol: "close"; implicitWidth: 26; implicitHeight: 26; onClicked: filterInput.text = "" }
+                }
+            }
+            RowLayout {
+                visible: dk.selected === "" && !dk.daemonDown
+                Layout.fillWidth: true
+                spacing: 4
+                Chip { label: `${Translation.tr("All")} ${dk.containers.length}`; active: dk.stateFilter === "all"; onClicked: dk.stateFilter = "all" }
+                Chip { label: `${Translation.tr("Running")} ${dk.runningCount}`; active: dk.stateFilter === "running"; onClicked: dk.stateFilter = "running" }
+                Chip { label: `${Translation.tr("Stopped")} ${dk.containers.length - dk.runningCount}`; active: dk.stateFilter === "stopped"; onClicked: dk.stateFilter = "stopped" }
+                Item { Layout.fillWidth: true }
+                RippleButton {
+                    id: sortBtn
+                    implicitHeight: 26
+                    implicitWidth: sortRow.implicitWidth + 16
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: dk.sortKey = ({ state: "name", name: "cpu", cpu: "mem", mem: "state" })[dk.sortKey]
+                    contentItem: RowLayout {
+                        id: sortRow
+                        spacing: 4
+                        MaterialSymbol { text: "sort"; iconSize: Appearance.font.pixelSize.normal; color: Appearance.colors.colSubtext }
+                        StyledText {
+                            text: ({ state: Translation.tr("Running first"), name: Translation.tr("Name"), cpu: Translation.tr("CPU"), mem: Translation.tr("Memory") })[dk.sortKey]
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                    StyledToolTip { text: Translation.tr("Change sort order"); visible: sortBtn.hovered }
+                }
+            }
+
             // Container list
             ListView {
                 id: list
@@ -333,7 +458,7 @@ WidgetBase {
                 Layout.fillHeight: true
                 clip: true
                 spacing: 4
-                model: dk.containers
+                model: dk.visibleContainers
                 boundsBehavior: Flickable.StopAtBounds
                 delegate: RippleButton {
                     id: rowBtn
@@ -420,10 +545,13 @@ WidgetBase {
 
                 StyledText {
                     anchors.centerIn: parent
-                    visible: dk.loaded && dk.containers.length === 0
+                    visible: dk.loaded && dk.visibleContainers.length === 0
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.colSubtext
-                    text: dk.error !== "" ? dk.error : Translation.tr("No running containers")
+                    text: dk.error !== "" ? dk.error
+                        : dk.containers.length === 0 ? Translation.tr("No containers")
+                        : dk.query !== "" ? Translation.tr("No containers match")
+                        : dk.stateFilter === "running" ? Translation.tr("No running containers") : Translation.tr("No stopped containers")
                     width: parent.width - 40
                     wrapMode: Text.Wrap
                 }
