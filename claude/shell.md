@@ -6,6 +6,7 @@ Loaded at start by the AI sidebar (`--append-system-prompt-file`). The repo `~/r
 - After editing, run that folder's `./install.sh` (it backs up what it replaces to `~/backups/<name>/<timestamp>/`), then reload. Hyprland reloads Lua config by itself; restart the shell after QML changes: `qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown`.
 - Hyprland uses the Lua config: legacy dispatch syntax fails. Use e.g. `hyprctl dispatch 'hl.dsp.focus({ workspace = "e+1" })'`.
 - Panel widgets (bar button + left panel, or app window on a special workspace) must use the shared code in `widget-base/` (`WidgetBase.qml`, `side-panel.sh`); never re-implement click-away, monitor rules, Esc, menus or install logic. Read `widget-base/README.md` first; add missing generic options there.
+- Other Quickshell add-ons (window overlays, keyboard grabs, background watchers: anything that is neither part of ii nor a panel widget) must be a `Scope` component in `shell-extras/`, loaded by the shared `qs -c extras` process; never start a new `qs` process for one. Read `shell-extras/README.md` first.
 - Don't edit upstream illogical-impulse files directly; patch via the repo's installers.
 - Commit and push (`origin`, `master`) only when asked.
 - Prefer small, reversible changes; take a backup (`./backup.sh`) before risky ones.
