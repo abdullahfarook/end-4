@@ -1,4 +1,4 @@
-# end-4 customizations
+# ii-dev
 
 Personal tweaks on top of the illogical-impulse (end-4) Hyprland + Quickshell dotfiles.
 This repo is the source of truth; `install.sh` in each folder applies it to the live config.

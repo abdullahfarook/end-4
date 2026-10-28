@@ -17,10 +17,10 @@ for a in $stale; do hyprctl dispatch "hl.dsp.window.close({ window = \"address:$
 "$P" toggle ai 9>&-; [ $? = 3 ] || exit 0   # shared: hide / show here / dock a stray window
 # Resume the last conversation (survives restart/logout); start a new one if there is none
 case $backend in
-    claude) cmd='f="$HOME/repos/end-4/claude/shell.md"; set -- ; [ -r "$f" ] && set -- --append-system-prompt-file "$f"; claude --continue "$@" || exec claude "$@"' ;;
+    claude) cmd='f="$HOME/repos/ii-dev/claude/shell.md"; set -- ; [ -r "$f" ] && set -- --append-system-prompt-file "$f"; claude --continue "$@" || exec claude "$@"' ;;
     codex)  cmd='codex resume --last || exec codex' ;;
     # agy has no system-prompt flag: a new conversation gets the same standing instructions as its first prompt
-    antigravity) cmd='f="$HOME/repos/end-4/claude/shell.md"; agy --continue || { [ -r "$f" ] && exec agy -i "$(cat "$f")"; exec agy; }' ;;
+    antigravity) cmd='f="$HOME/repos/ii-dev/claude/shell.md"; agy --continue || { [ -r "$f" ] && exec agy -i "$(cat "$f")"; exec agy; }' ;;
 esac
 # Scrub Claude Code's own env: if this script was run from inside a claude session (tests, tools), kitty would
 # carry CLAUDE_CODE_CHILD_SESSION/SESSION_ID forever and every sidebar claude would start with transcript saving off
