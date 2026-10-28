@@ -24,7 +24,7 @@ install -Dm644 "$REPO/gsearch-pip.qml" "$HOME/.config/hypr/custom/gsearch-pip.qm
 install -Dm755 "$REPO/gsearch-popout.sh" "$HOME/.config/hypr/custom/gsearch-popout.sh"
 install -Dm755 "$REPO/gsearch-open.sh" "$HOME/.config/hypr/custom/gsearch-open.sh"
 install -Dm755 "$REPO/gsearch-close.sh" "$HOME/.config/hypr/custom/gsearch-close.sh"
-[ -e "$HOME/.config/hypr/custom/gsearch-close-delay" ] || install -Dm644 "$REPO/gsearch-close-delay" "$HOME/.config/hypr/custom/gsearch-close-delay"  # tuning knob, never overwritten
+rm -f "$HOME/.config/hypr/custom/gsearch-close-delay"   # old close-timing knob: the panel now slides a still of the browser out itself
 python3 - "$BAR" "$KEYBINDS" "$REPO/google-search-rules.lua" <<'PY'
 import re, sys
 bar, kb, rules = sys.argv[1:4]

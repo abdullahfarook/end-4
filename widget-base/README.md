@@ -75,6 +75,7 @@ card(s); place them at `Appearance.sizes.hyprlandGapsOut` from the left and top 
 |---|---|
 | `panelMaskItems: list<Item>` | The items that take clicks (everything else is click-through). Mail: `detailOpen ? [panel, detail] : [panel]`. Google: `[card, dropdown, grip]`. |
 | `panelClickThrough: rect` | Screen-coordinate rect where clicks reach the windows below instead of closing the panel (Google: the browser window next to the card). |
+| `panelCloseHold: bool` | After the panel closes, keep its window up while this is true (at most 250 ms), then it slides out. React to the button's `open` turning false to get ready, then set it false. Google: swaps its browser window for a still inside the panel, so the card and the browser slide out as one. |
 | `panelHidden: bool` | Hide the panel window for a while without closing (Google: a video is fullscreen). |
 
 ### Keys

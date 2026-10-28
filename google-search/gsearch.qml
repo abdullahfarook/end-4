@@ -61,19 +61,32 @@ Window {
             else { var o = JSON.parse(r); emit("popout " + Math.floor(o.t) + " " + o.u) }
         })
     }
+    property bool quitting: false
+    function quit() { quitting = true; Qt.quit() }  // Qt.quit() closes the window first: onClosing must let it
     function run(c, a) {
-        if (c === "hide") Qt.quit()
+        if (c === "hide") quit()
         else if (c === "back") view.goBack()
         else if (c === "forward") view.goForward()
         else if (c === "reload") view.reload()
         else if (c === "stop") view.stop()
         else if (c === "open") external(view.url)
         else if (c === "popout") popout()
-        else if (c === "goto") goto(a)
-        else show(a)
+        else if (c === "goto") { win.visible = true; goto(a) }  // reopened: map again (hidden by the panel closing)
+        else { win.visible = true; show(a) }
     }
 
-    Shortcut { sequence: "Esc"; onActivated: { if (win.visibility === Window.FullScreen) view.fullScreenCancelled(); else { win.emit("exit"); Qt.quit() } } }
+    // Esc: the panel closes (and hides this window); quit only if no panel reacts
+    Shortcut { sequence: "Esc"; onActivated: { if (win.visibility === Window.FullScreen) view.fullScreenCancelled(); else { win.emit("exit"); orphanQuit.start() } } }
+    Timer { id: orphanQuit; interval: 2000; onTriggered: if (win.visible) win.quit() }
+
+    // Close request: the panel closing (it shows a still of this window and slides out with it). Only unmap (no animation, see
+    // google-search-rules.lua): a quick reopen shows the same page again; gsearch-close.sh quits the helper a moment later.
+    onClosing: (close) => {
+        if (quitting) return
+        close.accepted = false
+        if (win.visibility === Window.FullScreen) view.fullScreenCancelled()
+        win.visible = false
+    }
 
     WebEngineProfile {
         id: profile

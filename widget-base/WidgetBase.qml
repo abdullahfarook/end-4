@@ -22,7 +22,8 @@ RippleButton {
     property var ignoredLayers: []     // extra layer namespaces whose opening must not close the panel
     // false: the content draws its own card(s) (e.g. a list + a detail pane) and lists its clickable items in
     // `panelMaskItems`; it may also set `panelClickThrough` (a rect, screen coordinates: clicks there reach the windows
-    // below, e.g. a browser window placed next to the card) and `panelHidden` (hide the panel window for a while)
+    // below, e.g. a browser window placed next to the card), `panelHidden` (hide the panel window for a while) and
+    // `panelCloseHold` (after closing, keep the panel window up while true, max 250 ms, to get ready for the slide-out)
     property bool panelCard: true
     readonly property var panelScreen: root.QsWindow.window?.screen ?? null
 
@@ -86,16 +87,25 @@ RippleButton {
         opacity: root.iconOpacity
     }
 
-    // keep the panel alive briefly after closing: unmapping (not destroying) the layer lets Hyprland play the slide-out
-    onOpenChanged: if (!open) unloadDelay.restart()
-    Timer { id: unloadDelay; interval: 400 }
+    // keep the panel alive briefly after closing: unmapping (not destroying) the layer lets Hyprland play the slide-out.
+    // A flag, not unloadDelay.running: restarting a running timer flips `running` and would recreate the panel.
+    property bool panelLoaded: false
+    onOpenChanged: if (open) panelLoaded = true; else unloadDelay.restart()
+    Timer { id: unloadDelay; interval: 400; onTriggered: if (!root.open) root.panelLoaded = false }
     Loader {
-        active: (root.open || unloadDelay.running) && root.panelContent !== null
+        active: (root.open || root.panelLoaded) && root.panelContent !== null
         sourceComponent: Scope {
             id: panel
             property real openedAt: Date.now()
             // reopened during the close animation: this instance is reused, so restart the open-time state
-            Connections { target: root; function onOpenChanged() { if (root.open) { panel.openedAt = Date.now(); panel.wsAtOpen = panel.monitor?.activeWorkspace?.id ?? 0 } } }
+            Connections { target: root; function onOpenChanged() { if (root.open) { panel.openedAt = Date.now(); panel.wsAtOpen = panel.monitor?.activeWorkspace?.id ?? 0; panel.holdExpired = false; holdLimit.stop() } else holdLimit.restart() } }
+            // the content may keep the panel window up for a moment after closing (panelCloseHold), never longer than holdLimit
+            // (Google: swaps its browser window for a still in the panel, so the card and the browser slide out as one).
+            // `held` must not depend on `open`: the window's visibility would read it stale on close and unmap/remap the panel
+            property bool holdExpired: false
+            readonly property bool held: (content.item?.panelCloseHold ?? false) && !holdExpired
+            Timer { id: holdLimit; interval: 250; onTriggered: panel.holdExpired = true }
+            onHeldChanged: if (!held && !root.open) unloadDelay.restart()   // the slide-out starts now: keep the content until it is done
             // monitor the panel was opened on (frozen at open)
             readonly property string popupMon: root.panelScreen?.name ?? Hyprland.focusedMonitor?.name ?? ""
             readonly property var screen: root.panelScreen
@@ -166,7 +176,7 @@ RippleButton {
             PanelWindow {
                 id: win
                 screen: panel.screen
-                visible: root.open && !(content.item?.panelHidden ?? false)
+                visible: (root.open || panel.held) && !(content.item?.panelHidden ?? false)
                 color: "transparent"
                 anchors { top: true; left: true; bottom: true }
                 implicitWidth: root.panelWidth + Appearance.sizes.hyprlandGapsOut + Appearance.sizes.elevationMargin

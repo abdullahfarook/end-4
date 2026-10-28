@@ -6,10 +6,12 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Widgets
 
 // Google widget: bar button + side panel (search field + results in a separate QtWebEngine window placed next to the card).
 // Panel behavior (open/close, click-away, monitors) comes from WidgetBase; the content draws its own card (it shrinks to a
-// header when results show) and leaves the browser area click-through.
+// header when results show) and leaves the browser area click-through. On close the browser window is swapped for a still
+// inside the panel, so the card and the browser slide out as one panel.
 WidgetBase {
     id: root
     iconName: "public"
@@ -97,25 +99,33 @@ WidgetBase {
             refreshSuggestions();
         }
 
-        // The browser window lives on its own special workspace (rule in google-search-rules.lua); toggling it slides the browser in/out with the
-        // curve/speed of the header layer. The scripts time the close against the layer's exit and keep the helper alive until the slide is done.
+        // The browser window lives on its own special workspace (rule in google-search-rules.lua) and has no animation of its own:
+        // closing hands it off to the panel (handOff), and the scripts quit the helper a moment after the panel is gone.
         readonly property string scriptDir: Quickshell.env("HOME") + "/.config/hypr/custom"
         property bool closed: false
-        Component.onCompleted: {
+        function start() { // show the browser workspace and start the browser (or show the running one again) on the last page
+            handedOff = false;
+            closed = false;
+            browserShown = false;
+            stillSource = null;
+            stillGrab = null;
             Quickshell.execDetached([scriptDir + "/gsearch-open.sh"]);
-            target.loadHistory(); // pick up changes saved by another bar's button
             const url = gq.target.memUrl ?? "";
-            if (url !== "") { // restore the last session: field text + exact page (selected, so typing replaces it)
-                gq.restoring = true;
-                input.text = gq.target.memQuery ?? "";
-                input.selectAll();
-                gq.restoring = false;
-                gq.loading = true;
-            }
+            if (url !== "") gq.loading = true;
             Quickshell.execDetached({
                 command: url !== "" ? [bin, "goto", url] : [bin, "show", ""],
                 environment: { GSEARCH_BG: String(Appearance.m3colors.m3surfaceContainer), GSEARCH_THUMB: String(Appearance.colors.colOutlineVariant), GSEARCH_THUMB_HOVER: String(Appearance.colors.colOutline) }
             });
+        }
+        Component.onCompleted: {
+            target.loadHistory(); // pick up changes saved by another bar's button
+            if ((gq.target.memUrl ?? "") !== "") { // restore the last session: field text + exact page (selected, so typing replaces it)
+                gq.restoring = true;
+                input.text = gq.target.memQuery ?? "";
+                input.selectAll();
+                gq.restoring = false;
+            }
+            start();
         }
         function closeBrowser() {
             if (closed) return;
@@ -124,6 +134,61 @@ WidgetBase {
             Quickshell.execDetached([scriptDir + "/gsearch-close.sh"]);
         }
         Component.onDestruction: closeBrowser()
+
+        // Closing: the browser is a separate window, so it can't share the panel's slide-out. Put a still of it at its exact place in the
+        // panel, hide the window once the panel shows the still, then let WidgetBase slide the panel out (panelCloseHold): one panel leaves.
+        readonly property bool panelCloseHold: !handedOff
+        property bool handingOff: false
+        property bool handedOff: false
+        property var stillSource: null      // the browser's toplevel while it is being captured
+        property var stillGrab: null        // the capture, frozen: shown while the panel slides out
+        property size stillSize: Qt.size(0, 0)
+        property string browserAddress: ""
+        readonly property real panelTop: (root.panelScreen?.height ?? height) - height // the panel window starts below the bar
+        readonly property real dpr: root.panelScreen?.devicePixelRatio ?? 1
+        function handOff() {
+            if (handingOff || handedOff) return;
+            const w = ToplevelManager.toplevels.values.find(t => t.title === "gsearch");
+            if (!w?.HyprlandToplevel) { finishHandOff(); return; }
+            handingOff = true;
+            browserAddress = w.HyprlandToplevel.address;
+            handOffLimit.restart();
+            if (browserShown && !fullscreen) stillSource = w; // -> capture -> stillReady -> stillShown -> hideBrowser
+            else hideBrowser(); // nothing of it shows: behind the full-height card, or the panel is hidden for a fullscreen video
+        }
+        // The capture is frozen into an image and dropped before the window goes: a capture of a closed window is a Wayland
+        // protocol error that disconnects the whole shell
+        function stillReady(grab) {
+            stillGrab = grab;
+            stillSource = null;
+            if (handingOff) stillShown.restart();
+        }
+        function hideBrowser() { // gsearch.qml only hides on a close request
+            stillSource = null;
+            Hyprland.dispatch(`hl.dsp.window.close({ window = "address:0x${browserAddress}" })`);
+        }
+        function finishHandOff() {
+            handOffLimit.stop();
+            stillShown.stop();
+            lateHide.stop();
+            handingOff = false;
+            handedOff = true;
+            closeBrowser();
+            if (root.open) start(); // reopened meanwhile
+        }
+        Timer { id: stillShown; interval: 20; onTriggered: gq.hideBrowser() } // the panel has drawn the still by now (the capture showed before the grab)
+        // WidgetBase waits at most 250 ms: give up on the still (drop any capture first), hide the window and slide out
+        Timer { id: handOffLimit; interval: 180; onTriggered: { gq.stillSource = null; lateHide.restart() } }
+        Timer { id: lateHide; interval: 30; onTriggered: { gq.hideBrowser(); gq.finishHandOff() } }
+        Connections {
+            target: Hyprland
+            enabled: gq.handingOff
+            function onRawEvent(event) { if (event.name === "closewindow" && event.data === gq.browserAddress) gq.finishHandOff() }
+        }
+        Connections {
+            target: root
+            function onOpenChanged() { if (!root.open) gq.handOff(); else if (gq.handedOff) gq.start() }
+        }
 
         Timer { interval: 400; running: true; onTriggered: gq.openGrab = false }
         Timer { id: resizeTick; interval: 50; onTriggered: gq.applyWidth() }
@@ -147,6 +212,29 @@ WidgetBase {
                     else if (line === "exit") root.close() // Esc in the browser
                 }
             }
+        }
+
+        ClippingRectangle { // closing: a still of the browser window at its exact place (under the card, like the window), see handOff
+            visible: gq.handingOff || gq.handedOff
+            x: gq.browserX
+            y: gq.browserY - gq.panelTop
+            width: gq.stillSize.width
+            height: gq.stillSize.height
+            radius: 8 // the window's rounding (google-search-rules.lua)
+            color: "transparent"
+            Loader {
+                anchors.fill: parent
+                active: gq.stillSource !== null
+                sourceComponent: ScreencopyView {
+                    captureSource: gq.stillSource
+                    live: false
+                    onHasContentChanged: if (hasContent) {
+                        gq.stillSize = Qt.size(sourceSize.width / gq.dpr, sourceSize.height / gq.dpr);
+                        grabToImage(grab => gq.stillReady(grab), sourceSize);
+                    }
+                }
+            }
+            Image { anchors.fill: parent; source: gq.stillGrab?.url ?? ""; cache: false }
         }
 
         StyledRectangularShadow { target: card }
