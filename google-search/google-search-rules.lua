@@ -5,7 +5,7 @@ hl.window_rule({ match = gs, float = true })
 hl.window_rule({ match = gs, workspace = "special:gsearch silent" })
 hl.window_rule({ match = gs, size = { 440, "(monitor_h-119)" } })
 hl.window_rule({ match = gs, move = { 5, 86 } })
-hl.window_rule({ match = gs, no_initial_focus = true })
+-- no no_initial_focus: with none, Hyprland falls back to the last focused window (often the AI sidebar) and shows its special workspace, closing this panel
 -- no animation or dim of its own: it is part of the panel, which slides a still of it out with the card (GoogleSearchButton.qml)
 hl.window_rule({ match = gs, no_anim = true })
 hl.window_rule({ match = gs, no_dim = true })

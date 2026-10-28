@@ -3,6 +3,7 @@
 // polled); status lines go to stderr as "GS <line>" and gsearch.sh appends them to $XDG_RUNTIME_DIR/gsearch-status.
 import QtQuick
 import QtQuick.Window
+import QtQuick.Controls
 import QtWebEngine
 
 Window {
@@ -132,6 +133,12 @@ Window {
                 req.action = WebEngineNavigationRequest.IgnoreRequest; win.external(req.url)
             }
         }
+        // Native Chromium menu's Copy does nothing here (window has no keyboard focus): own menu, text goes to wl-copy
+        onContextMenuRequested: (req) => {
+            req.accepted = true
+            win.ctxText = req.selectedText; win.ctxLink = req.linkUrl.toString()
+            if (win.ctxText !== "" || win.ctxLink !== "") ctxMenu.popup()
+        }
         onNewWindowRequested: (req) => { if (win.altDown) win.external(req.requestedUrl); else view.url = req.requestedUrl }  // target=_blank / window.open: same view unless Ctrl/Alt held
 
         onLoadingChanged: (r) => {
@@ -153,6 +160,15 @@ Window {
             win.emit("url " + url.toString())  // the popup remembers the page (memory only) to restore it on reopen
             win.emit("nav " + (canGoBack ? 1 : 0) + " " + (canGoForward ? 1 : 0))
         }
+    }
+
+    property string ctxText: ""
+    property string ctxLink: ""
+    function copyText(t) { emit("copy " + encodeURIComponent(t)) }  // gsearch.sh pipes it to wl-copy (Qt clipboard writes fail without keyboard focus)
+    Menu {
+        id: ctxMenu
+        MenuItem { text: "Copy"; enabled: win.ctxText !== ""; onTriggered: win.copyText(win.ctxText) }
+        MenuItem { text: "Copy link address"; enabled: win.ctxLink !== ""; onTriggered: win.copyText(win.ctxLink) }
     }
 
     // Tell the popup whether a video is present (it only shows the pop-out button then)

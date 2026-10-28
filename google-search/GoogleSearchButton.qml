@@ -41,13 +41,13 @@ WidgetBase {
         readonly property var target: root   // the button keeps the session (query, page, width) and history while closed
         // WidgetBase contract for a custom layout
         readonly property list<Item> panelMaskItems: [card, dropdown, grip]
-        readonly property rect panelClickThrough: gq.browserShown ? Qt.rect(gq.browserX, gq.browserY, gq.cardWidth, (root.panelScreen?.height ?? 2000) - gq.browserY) : Qt.rect(0, 0, 0, 0)
+        readonly property rect panelClickThrough: (gq.browserShown || gq.loading) ? Qt.rect(gq.browserX, gq.browserY, gq.cardWidth, (root.panelScreen?.height ?? 2000) - gq.browserY) : Qt.rect(0, 0, 0, 0)
         readonly property bool panelHidden: gq.fullscreen   // the page video is fullscreen
         Binding { target: root; property: "panelWidth"; value: gq.cardWidth }
         // The field must own the keyboard on open and while the first search loads (the browser window would steal focus when it maps),
         // so grab it exclusively for a moment / while loading; otherwise OnDemand, because an exclusive layer makes Hyprland
         // ignore clicks on windows and on the click-away layer.
-        Binding { target: root; property: "panelKeyboardFocus"; value: (gq.openGrab || (gq.loading && !gq.browserShown)) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand }
+        Binding { target: root; property: "panelKeyboardFocus"; value: gq.openGrab ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand }
         readonly property string screenName: root.panelScreen?.name ?? ""   // the bar's monitor, pinned at open (the browser opens there too)
         property string query: ""
         property bool browserShown: false
@@ -190,7 +190,7 @@ WidgetBase {
             function onOpenChanged() { if (!root.open) gq.handOff(); else if (gq.handedOff) gq.start() }
         }
 
-        Timer { interval: 400; running: true; onTriggered: gq.openGrab = false }
+        Timer { interval: 250; running: true; onTriggered: gq.openGrab = false }  // short: while exclusive, Hyprland ignores clicks and shows no pointer feedback
         Timer { id: resizeTick; interval: 50; onTriggered: gq.applyWidth() }
         // The helper runs detached (it must outlive this popup until the slide-out is done); it reports status lines to a file
         readonly property string statusFile: (Quickshell.env("XDG_RUNTIME_DIR") ?? "/tmp") + "/gsearch-status"

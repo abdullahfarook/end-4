@@ -14,5 +14,8 @@ case "$cmd" in show|goto) ;; *) exit 0 ;; esac
 export QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 QML_XHR_ALLOW_FILE_READ=1
 ( setsid qml6 "$DIR/gsearch.qml" -- "${GSEARCH_BG:-#1f1f1f}" "${GSEARCH_THUMB:-#6a6a6a}" "${GSEARCH_THUMB_HOVER:-#9a9a9a}" \
       "cmdfile=$CMDF" "data=$HOME/.local/share/gsearch" 2>&1 >/dev/null \
-  | sed -u -n 's/^qml: GS //p' >> "$STATUS" ) 9>&- &
+  | sed -u -n 's/^qml: GS //p' \
+  | while IFS= read -r l; do
+      case "$l" in copy\ *) printf '%b' "$(printf '%s' "${l#copy }" | sed 's/%/\\x/g')" | wl-copy ;; *) printf '%s\n' "$l" >> "$STATUS" ;; esac
+    done ) 9>&- &
 disown
