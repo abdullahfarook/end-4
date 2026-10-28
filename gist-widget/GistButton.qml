@@ -538,8 +538,8 @@ WidgetBase {
             if (d.count === 0) { formError = Translation.tr("A gist needs at least one file."); return; }
             if (!store.changed) { formError = Translation.tr("No changes to save."); return; }
             let renamed = false;
-            for (let i = 0; i < d.count; i++) {   // the names GitHub will store, so the fields show them too
-                const n = d.get(i).name, t = n.trim() !== "" ? n.trim() : `gistfile${i + 1}.txt`;
+            for (let i = 0; i < d.count; i++) {   // the names GitHub will store, so the fields show them too (unnamed = Markdown)
+                const n = d.get(i).name, t = n.trim() !== "" ? n.trim() : `gistfile${i + 1}.md`;
                 if (t !== n) { d.setProperty(i, "name", t); renamed = true; }
             }
             if (store.draftDesc !== store.draftDesc.trim()) { store.draftDesc = store.draftDesc.trim(); renamed = true; }
@@ -1294,6 +1294,9 @@ WidgetBase {
                 delegate: ColumnLayout {
                     id: fileItem
                     required property var modelData
+                    readonly property bool markdown: modelData.language === "Markdown" || /\.(md|markdown)$/i.test(modelData.filename)
+                    property bool source: false   // Markdown files show the rendered preview unless switched to the source
+                    readonly property bool preview: markdown && !source
                     width: fileList.width
                     spacing: 4
                     RowLayout {
@@ -1310,6 +1313,12 @@ WidgetBase {
                         }
                         LangChip { text: fileItem.modelData.language }
                         StyledText { text: gs.fmtSize(fileItem.modelData.size); font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
+                        IconBtn {
+                            visible: fileItem.markdown
+                            symbol: "preview"; iconColor: fileItem.preview ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer2
+                            tip: fileItem.preview ? Translation.tr("Showing the preview · click for the Markdown source") : Translation.tr("Showing the source · click for the preview")
+                            onClicked: fileItem.source = !fileItem.source
+                        }
                         IconBtn { symbol: "content_copy"; tip: Translation.tr("Copy file"); onClicked: gs.copy(fileItem.modelData.content, Translation.tr("File copied")) }
                         IconBtn {
                             readonly property bool local: !!gs.current?.local
@@ -1320,11 +1329,30 @@ WidgetBase {
                     }
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: code.implicitHeight + 16
+                        implicitHeight: (fileItem.preview ? md.implicitHeight : code.implicitHeight) + 16
                         radius: Appearance.rounding.small
                         color: Appearance.colors.colLayer0
+                        TextEdit {   // own item: switching one TextEdit's textFormat back to plain keeps the formatting
+                            id: md
+                            visible: fileItem.preview
+                            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.Wrap
+                            textFormat: TextEdit.MarkdownText
+                            text: fileItem.markdown ? fileItem.modelData.content : ""
+                            font.family: Appearance.font.family.reading
+                            font.hintingPreference: Font.PreferNoHinting
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colOnLayer0
+                            selectionColor: Appearance.colors.colSecondaryContainer
+                            selectedTextColor: Appearance.colors.colOnSecondaryContainer
+                            onLinkActivated: link => Qt.openUrlExternally(link)
+                            HoverHandler { cursorShape: md.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor }
+                        }
                         TextEdit {
                             id: code
+                            visible: !fileItem.preview
                             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
                             readOnly: true
                             selectByMouse: true
@@ -1419,7 +1447,7 @@ WidgetBase {
                                 Field {
                                     id: nameField
                                     mono: true
-                                    placeholder: Translation.tr("File name with extension, e.g. notes.md")
+                                    placeholder: Translation.tr("File name, e.g. notes.md (empty: gistfile%1.md)").arg(fileEd.index + 1)
                                     onEdited: text => { if (text !== fileEd.name) { gs.store.draft.setProperty(fileEd.index, "name", text); gs.store.touchDraft(); } }
                                     Connections { target: gs; function onDraftGenChanged() { nameField.input.text = gs.store.draft.get(fileEd.index)?.name ?? "" } }
                                     Component.onCompleted: nameField.input.text = fileEd.name
