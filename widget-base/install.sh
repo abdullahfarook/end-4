@@ -11,6 +11,7 @@ backup() { mkdir -p "$BACKUP"; cp "$@" "$BACKUP/"; }
 [ -f "$H/side-panel.sh" ] && ! cmp -s "$REPO/side-panel.sh" "$H/side-panel.sh" && backup "$H/side-panel.sh"
 grep -q ">>> side-panel >>>" "$KEYBINDS" || backup "$KEYBINDS"
 install -Dm644 "$REPO/WidgetBase.qml" "$D/WidgetBase.qml"
+install -Dm644 "$REPO/PanelRegistry.qml" "$D/PanelRegistry.qml"
 install -Dm755 "$REPO/side-panel.sh" "$H/side-panel.sh"
 # Per-panel click-away/watch scripts replaced by side-panel.sh
 for f in ai-sidebar-clickaway.sh ai-sidebar-watch.sh teams-panel-clickaway.sh vscode-git-clickaway.sh; do

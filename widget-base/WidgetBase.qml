@@ -90,7 +90,9 @@ RippleButton {
     // keep the panel alive briefly after closing: unmapping (not destroying) the layer lets Hyprland play the slide-out.
     // A flag, not unloadDelay.running: restarting a running timer flips `running` and would recreate the panel.
     property bool panelLoaded: false
-    onOpenChanged: if (open) panelLoaded = true; else unloadDelay.restart()
+    onOpenChanged: if (open) { panelLoaded = true; PanelRegistry.closeOthers(root) } else unloadDelay.restart()
+    Component.onCompleted: PanelRegistry.register(root)
+    Component.onDestruction: PanelRegistry.unregister(root)
     Timer { id: unloadDelay; interval: 400; onTriggered: if (!root.open) root.panelLoaded = false }
     Loader {
         active: (root.open || root.panelLoaded) && root.panelContent !== null
