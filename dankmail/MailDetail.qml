@@ -140,6 +140,7 @@ Rectangle {
                         opacity: status === Image.Ready ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 180 } }
                         width: Math.min(slot.seg.w > 0 ? slot.seg.w : implicitWidth, slot.maxW)
+                        x: slot.seg.align === "center" ? (slot.maxW - width) / 2 : slot.seg.align === "right" ? slot.maxW - width : 0
                         height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : 0
                         visible: opacity > 0
                     }
@@ -147,6 +148,7 @@ Rectangle {
                         id: skel
                         visible: img.status === Image.Loading || img.status === Image.Null
                         width: Math.min(slot.seg.w > 0 ? slot.seg.w : slot.maxW, slot.maxW)
+                        x: slot.seg.align === "center" ? (slot.maxW - width) / 2 : slot.seg.align === "right" ? slot.maxW - width : 0
                         height: parent.height - 6
                         y: 3
                         radius: 12
