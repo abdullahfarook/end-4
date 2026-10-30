@@ -55,6 +55,14 @@ function hashFile(file) {
   }
 }
 
+async function excludedLines(root) {
+  try {
+    return new Set(fs.readFileSync(await gitPath(root, 'info/exclude'), 'utf8').split(/\r?\n/));
+  } catch {
+    return new Set();
+  }
+}
+
 // Map of index path -> true if skip-worktree is set.
 async function indexFlags(root) {
   const out = await git(root, ['ls-files', '-v', '-z']);
@@ -63,6 +71,26 @@ async function indexFlags(root) {
     if (entry.length > 2) flags.set(entry.slice(2), entry[0] === 'S');
   }
   return flags;
+}
+
+// Untracked files are hidden via a line in .git/info/exclude instead of skip-worktree.
+async function setExcluded(root, rel, on) {
+  const exclude = await gitPath(root, 'info/exclude');
+  const line = '/' + rel;
+  const existing = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
+  const lines = existing.split(/\r?\n/);
+  if (on === lines.includes(line)) return;
+  if (on) {
+    fs.mkdirSync(path.dirname(exclude), { recursive: true });
+    fs.appendFileSync(exclude, (existing && !existing.endsWith('\n') ? '\n' : '') + line + '\n');
+  } else {
+    fs.writeFileSync(exclude, lines.filter(l => l !== line).join('\n'));
+  }
+}
+
+// Hide or show one recorded file, whichever way it was hidden.
+function setHidden(root, rel, entry, on) {
+  return entry.untracked ? setExcluded(root, rel, on) : setSkip(root, rel, on);
 }
 
 function setSkip(root, rel, on) {
@@ -117,18 +145,20 @@ async function updateContext() {
 
     // Drop entries for files that are no longer in the index (deleted or renamed upstream).
     const listed = Object.keys(st.files);
-    const gone = listed.filter(p => !flags.has(p));
+    const gone = listed.filter(p => !flags.has(p) && !st.files[p].untracked);
     if (gone.length) {
       gone.forEach(p => delete st.files[p]);
       await saveState(root, st);
     }
 
     const tracked = Object.keys(st.files);
-    const visible = tracked.filter(p => !flags.get(p));
+    const excluded = await excludedLines(root);
+    const isHidden = p => st.files[p].untracked ? excluded.has('/' + p) : flags.get(p);
+    const visible = tracked.filter(p => !isHidden(p));
     if (visible.length) canHide.push(repo.rootUri.toString());
     else if (tracked.length) canShow.push(repo.rootUri.toString());
 
-    for (const rel of tracked.filter(p => flags.get(p))) {
+    for (const rel of tracked.filter(p => isHidden(p))) {
       const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(repo.rootUri, rel));
       const check = () => enqueue(() => checkChanged(repo, rel));
       w.onDidChange(check);
@@ -148,6 +178,7 @@ async function checkChanged(repo, rel) {
   const st = await loadState(root);
   const entry = st.files[rel];
   if (!entry) return;
+  if (entry.untracked) return;
   const flags = await indexFlags(root);
   if (!flags.get(rel)) return;
   const hash = hashFile(path.join(root, rel));
@@ -200,15 +231,11 @@ async function hideFile(...args) {
 
     const flags = await indexFlags(root);
     if (!flags.has(rel)) {
-      // Untracked files can't use skip-worktree; ignore them locally instead.
-      const exclude = await gitPath(root, 'info/exclude');
-      const existing = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
-      const line = '/' + rel;
-      if (!existing.split(/\r?\n/).includes(line)) {
-        fs.mkdirSync(path.dirname(exclude), { recursive: true });
-        fs.appendFileSync(exclude, (existing && !existing.endsWith('\n') ? '\n' : '') + line + '\n');
-      }
-      vscode.window.showInformationMessage(`Hidden Changes: ${rel} is untracked, added it to .git/info/exclude.`);
+      // Untracked files can't use skip-worktree; ignore them locally instead, and remember them so Show/Unhide work.
+      const st = await loadState(root);
+      st.files[rel] = { untracked: true };
+      await saveState(root, st);
+      await setExcluded(root, rel, true);
       continue;
     }
 
@@ -247,9 +274,10 @@ async function forgetFile(...args) {
     const root = repo.rootUri.fsPath;
     const st = await loadState(root);
     if (!st.files[rel]) continue;
+    const entry = st.files[rel];
     delete st.files[rel];
     await saveState(root, st);
-    await setSkip(root, rel, false);
+    await setHidden(root, rel, entry, false);
   }
   await refresh(targets.map(t => t.repo));
 }
@@ -267,7 +295,7 @@ async function showAll(sourceControl) {
   for (const repo of repos) {
     const root = repo.rootUri.fsPath;
     const st = await loadState(root);
-    for (const rel of Object.keys(st.files)) await setSkip(root, rel, false);
+    for (const [rel, e] of Object.entries(st.files)) await setHidden(root, rel, e, false);
   }
   await refresh(repos);
 }
@@ -278,9 +306,11 @@ async function hideAll(sourceControl) {
     const root = repo.rootUri.fsPath;
     const st = await loadState(root);
     // Re-hiding accepts the current content as the new baseline for change detection.
-    for (const rel of Object.keys(st.files)) st.files[rel].hash = hashFile(path.join(root, rel));
+    for (const rel of Object.keys(st.files)) {
+      if (!st.files[rel].untracked) st.files[rel].hash = hashFile(path.join(root, rel));
+    }
     await saveState(root, st);
-    for (const rel of Object.keys(st.files)) await setSkip(root, rel, true);
+    for (const [rel, e] of Object.entries(st.files)) await setHidden(root, rel, e, true);
   }
   await refresh(repos);
 }
