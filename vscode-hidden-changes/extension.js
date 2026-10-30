@@ -155,9 +155,10 @@ async function checkChanged(repo, rel) {
 
   await setSkip(root, rel, false);
   await refresh([repo]);
-  const choice = await vscode.window.showInformationMessage(
-    `Hidden Changes: ${rel} changed, so it is showing in Source Control again.`, 'Hide Again');
-  if (choice === 'Hide Again') {
+  // Not awaited: the toast stays open until dismissed and would block the queue (and any Hide command).
+  vscode.window.showInformationMessage(
+    `Hidden Changes: ${rel} changed, so it is showing in Source Control again.`, 'Hide Again').then(choice => {
+    if (choice !== 'Hide Again') return;
     enqueue(async () => {
       const cur = await loadState(root);
       if (!cur.files[rel]) return;
@@ -166,7 +167,7 @@ async function checkChanged(repo, rel) {
       await setSkip(root, rel, true);
       await refresh([repo]);
     });
-  }
+  });
 }
 
 async function hideFile(...args) {
