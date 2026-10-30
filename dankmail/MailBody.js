@@ -237,6 +237,12 @@ function parseTree(h) {
 }
 
 function plainText(n) { return n.t === "#text" ? n.x : n.c.map(plainText).join(""); }
+function hasText(n) {  // any visible text below (an image-only block keeps no background stripe once the image is split out)
+    if (n.t === "#text") return /[^\s\u00a0]/.test(n.x.replace(/&nbsp;/gi, ""));
+    if (n.hide) return false;
+    for (let i = 0; i < n.c.length; i++) if (hasText(n.c[i])) return true;
+    return false;
+}
 function hasContent(n) {  // visible text or an image anywhere below
     if (n.t === "#text") return /[^\s ͏​-‍⁠﻿­]/.test(n.x.replace(/&nbsp;|&zwnj;|&#847;|&#8199;|&#8204;|&#xa0;/gi, ""));
     if (n.t === "img") return !n.hide;
@@ -261,7 +267,7 @@ function _clean(h, width, loaded) {
     h.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (all, body) => { css += body + "\n"; return all; });
     const rules = parseSheet(css);
     rules.sort((a, b) => a.spec - b.spec);
-    h = h.replace(/<!--[\s\S]*?-->/g, "").replace(/<(head|style|script|title|svg|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, "");
+    h = h.replace(/<!--[\s\S]*?-->/g, "").replace(/<![a-z][^>]*>|<\?[\s\S]*?\?>/gi, "").replace(/<(head|style|script|title|svg|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, "");
     const tree = parseTree(h);
 
     function computed(n) {  // css props of one element: attributes < sheet < inline
@@ -310,14 +316,14 @@ function _clean(h, width, loaded) {
         const al = ctx.align;
         if (al) s.push("text-align:" + al);
         const mar = box(p["margin"], ctx.w), pad = box(p["padding"], ctx.w);
-        const mt = Math.min(36, Math.max(0, (px(p["margin-top"], ctx.w) !== null ? px(p["margin-top"], ctx.w) : mar[0]) + (px(p["padding-top"], ctx.w) !== null ? px(p["padding-top"], ctx.w) : pad[0])));
-        const mb = Math.min(36, Math.max(0, (px(p["margin-bottom"], ctx.w) !== null ? px(p["margin-bottom"], ctx.w) : mar[2]) + (px(p["padding-bottom"], ctx.w) !== null ? px(p["padding-bottom"], ctx.w) : pad[2])));
+        const mt = Math.min(20, 0.6 * Math.max(0, (px(p["margin-top"], ctx.w) !== null ? px(p["margin-top"], ctx.w) : mar[0]) + (px(p["padding-top"], ctx.w) !== null ? px(p["padding-top"], ctx.w) : pad[0])));
+        const mb = Math.min(20, 0.6 * Math.max(0, (px(p["margin-bottom"], ctx.w) !== null ? px(p["margin-bottom"], ctx.w) : mar[2]) + (px(p["padding-bottom"], ctx.w) !== null ? px(p["padding-bottom"], ctx.w) : pad[2])));
         if (mt > 0) s.push("margin-top:" + Math.round(mt) + "px");
         if (mb > 0) s.push("margin-bottom:" + Math.round(mb) + "px");
         const lh = String(p["line-height"] || "");
         if (/%$/.test(lh) && parseFloat(lh) > 100) s.push("line-height:" + Math.min(180, Math.round(parseFloat(lh))) + "%");
         else if (/^\d*\.?\d+$/.test(lh) && parseFloat(lh) > 1) s.push("line-height:" + Math.min(180, Math.round(parseFloat(lh) * 100)) + "%");
-        if (ctx.bgOwn) s.push("background-color:" + ctx.bgOwn);
+        if (ctx.bgOwn && ctx.hasText !== false) s.push("background-color:" + ctx.bgOwn);
         return (s.concat(extra || [])).join(";");
     }
     function textProps(p, ctx) {  // inline-level style: color, size, weight, italics, decoration. Returns { css, ctx }
@@ -358,7 +364,7 @@ function _clean(h, width, loaded) {
         if (w === null && n.a.width) w = px(n.a.width + "px");
         let ht = px(p["height"]);
         if (ht === null && n.a.height) ht = px(n.a.height + "px");
-        if ((w !== null && w <= 24) || (ht !== null && ht <= 24 && w === null)) return "";  // spacers, tracking pixels, icons: they also tear table rows apart when split out
+        if ((w !== null && w <= 12) || (ht !== null && ht <= 12 && w === null)) return "";  // spacers, tracking pixels, icons: they also tear table rows apart when split out
         if (known && (known.w <= 3 || known.h <= 3)) return "";
         if (w === null && known) w = known.w;
         if (w !== null) w = Math.min(w, ctx.w);
@@ -367,7 +373,8 @@ function _clean(h, width, loaded) {
         if (w && known && known.w > 0) hh = ' height="' + Math.max(1, Math.round(w * known.h / known.w)) + '"';
         else if (w && ht !== null && n.a.width) hh = ' height="' + Math.round(ht) + '"';
         const al = ctx.align === "center" || ctx.align === "right" ? ' data-align="' + ctx.align + '"' : "";
-        return '<img src="' + attr + '"' + (w ? ' width="' + Math.round(w) + '"' : "") + hh + al + ">";
+        const hr = ctx.href ? ' data-href="' + ctx.href.replace(/&/g, "&amp;").replace(/"/g, "&quot;") + '"' : "";
+        return '<img src="' + attr + '"' + (w ? ' width="' + Math.round(w) + '"' : "") + hh + al + hr + ">";
     }
 
     function inlineKids(n, ctx) { return n.c.map(k => node(k, ctx)).join(""); }
@@ -390,7 +397,7 @@ function _clean(h, width, loaded) {
         const al = String(p["text-align"] || td.a.align || "").toLowerCase();
         if (al === "center" || al === "right" || al === "left") c.align = al;
         const bg = bgOf(p);
-        if (bg) { c.bg = bg; c.bgOwn = bg; } else c.bgOwn = null;
+        if (bg) { c.bg = bg; c.bgOwn = bg; c.hasText = hasText(td); } else c.bgOwn = null;
         return c;
     }
 
@@ -504,12 +511,13 @@ function _clean(h, width, loaded) {
         if (al === "center" || al === "right" || al === "left") c = Object.assign({}, c, { "align": al });
         if (t === "center") c = Object.assign({}, c, { "align": "center" });
         const bg = bgOf(p);
-        if (bg) c = Object.assign({}, c, { "bg": bg, "bgOwn": bg });
+        if (bg) c = Object.assign({}, c, { "bg": bg, "bgOwn": bg, "hasText": hasText(n) });
         else if (c.bgOwn) c = Object.assign({}, c, { "bgOwn": null });
         if (t === "pre" || t === "textarea") c = Object.assign({}, c, { "pre": true });
         const kids = () => inlineKids(n, c);
         if (t === "a") {
             const href = n.a.href ? n.a.href.replace(/&amp;/g, "&") : "";
+            if (/^https?:/i.test(href)) c = Object.assign({}, c, { "href": href });
             const inner = kids();
             if (!/^(https?:|mailto:)/i.test(href)) return inner;
             const col = parseColor(p["color"]);
@@ -576,10 +584,34 @@ function segments(h, width) {
         const wm = tag.match(/\bwidth="?(\d+)/i);
         const sm = tag.match(/\bsrc="([^"]+)"/i);
         const am = tag.match(/\bdata-align="(\w+)"/);
-        out.push({ "img": true, "w": wm ? parseInt(wm[1]) : 0, "url": sm ? sm[1].replace(/&amp;/g, "&") : "", "align": am ? am[1] : "" });
+        const hm = tag.match(/\bdata-href="([^"]*)"/);
+        out.push({ "img": true, "w": wm ? parseInt(wm[1]) : 0, "url": sm ? sm[1].replace(/&amp;/g, "&") : "", "align": am ? am[1] : "",
+                   "href": hm ? hm[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&") : "" });
         last = off + tag.length;
         return tag;
     });
     if (last < c.length) out.push({ "html": c.slice(last) });
+    return groupIcons(out);
+}
+
+// Runs of small images each followed by a short label (social icons, badges) become one {group:[{url, w, href, label}]} item
+// so the view can lay them out in a row instead of stacking them.
+function groupIcons(segs) {
+    const label = h => String(h || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    const small = g => g && g.img && g.w > 0 && g.w <= 96;
+    const out = [];
+    let i = 0;
+    while (i < segs.length) {
+        const run = [];
+        let j = i;
+        while (j < segs.length && small(segs[j])) {
+            const lab = j + 1 < segs.length && segs[j + 1].html !== undefined ? label(segs[j + 1].html) : "";
+            const hasLabel = j + 1 < segs.length && segs[j + 1].html !== undefined && lab.length <= 24 && !/<(table|hr|h\d)\b/i.test(segs[j + 1].html);
+            run.push({ "url": segs[j].url, "w": segs[j].w, "href": segs[j].href, "label": hasLabel ? lab : "" });
+            j += hasLabel ? 2 : 1;
+        }
+        if (run.length >= 2) { out.push({ "group": run, "align": "center" }); i = j; }
+        else { out.push(segs[i]); i++; }
+    }
     return out;
 }

@@ -172,6 +172,44 @@ Rectangle {
                 }
             }
             Component {
+                id: iconRow  // small images with labels (social icons, badges) in one centered row
+                Flow {
+                    id: row
+                    property var seg: ({})
+                    readonly property real maxW: Math.max(200, Math.floor(messages.width - 30))
+                    width: maxW
+                    spacing: 18
+                    layoutDirection: Qt.LeftToRight
+                    leftPadding: Math.max(0, (maxW - childrenRect.width) / 2)
+                    Repeater {
+                        model: row.seg.group || []
+                        delegate: Column {
+                            required property var modelData
+                            spacing: 3
+                            Image {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                source: modelData.url
+                                asynchronous: true
+                                sourceSize.width: 128
+                                width: modelData.w; height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : modelData.w
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            StyledText {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                visible: text !== ""
+                                text: modelData.label
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                            }
+                            TapHandler {
+                                enabled: modelData.href !== ""
+                                onTapped: { Quickshell.execDetached(["xdg-open", modelData.href]); detail.store.popupOpen = false; detail.store.closeThread(); }
+                            }
+                        }
+                    }
+                }
+            }
+            Component {
                 id: textSlot
                 TextEdit {  // read-only but selectable/copyable (mouse drag, double/triple click, Ctrl+C)
                     id: bodyText
@@ -273,7 +311,7 @@ Rectangle {
                             required property var modelData
                             Layout.fillWidth: true
                             Layout.preferredHeight: item ? item.implicitHeight : 0
-                            sourceComponent: modelData.img ? imageSlot : textSlot
+                            sourceComponent: modelData.group ? iconRow : modelData.img ? imageSlot : textSlot
                             onLoaded: item.seg = modelData
                         }
                     }
