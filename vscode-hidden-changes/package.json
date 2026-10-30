@@ -24,7 +24,7 @@
 			},
 			{
 				"command": "hiddenChanges.forgetFile",
-				"title": "Stop Hiding File...",
+				"title": "Unhide Changes",
 				"category": "Hidden Changes"
 			},
 			{
