@@ -40,7 +40,7 @@ RippleButton {
         anchors.centerIn: parent
         width: 20; height: 20; radius: 10
         antialiasing: true
-        color: Appearance.colors.colOnLayer0
+        color: Appearance.colors.colOnSecondaryContainer   // same disc colour as the resource (CPU/disk/...) icons
         Image {
             anchors.centerIn: parent
             width: 16; height: 16
