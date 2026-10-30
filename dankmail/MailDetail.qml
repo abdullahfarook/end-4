@@ -133,7 +133,7 @@ Rectangle {
                         asynchronous: true
                         source: slot.seg.url || ""
                         fillMode: Image.PreserveAspectFit
-                        sourceSize.width: Math.ceil(slot.maxW * 2)  // cap decode size: huge originals made scrolling janky
+                        sourceSize.width: slot.seg.w > 0 ? Math.ceil(Math.min(slot.seg.w, slot.maxW) * 2) : 0  // cap decode size (huge originals made scrolling janky); unknown width = natural size, else SVG icons scale up to the pane
                         cache: true
                         smooth: false
                         mipmap: false
