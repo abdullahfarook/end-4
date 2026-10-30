@@ -1,0 +1,92 @@
+{
+	"name": "hidden-changes",
+	"displayName": "Hidden Changes",
+	"description": "Hide local changes to tracked files from Source Control (git skip-worktree), with a per-repo toggle.",
+	"publisher": "local",
+	"version": "0.1.0",
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"main": "./extension.js",
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"extensionDependencies": [
+		"vscode.git"
+	],
+	"contributes": {
+		"commands": [
+			{
+				"command": "hiddenChanges.hideFile",
+				"title": "Hide Changes",
+				"category": "Hidden Changes",
+				"icon": "$(eye-closed)"
+			},
+			{
+				"command": "hiddenChanges.forgetFile",
+				"title": "Stop Hiding File...",
+				"category": "Hidden Changes"
+			},
+			{
+				"command": "hiddenChanges.showAll",
+				"title": "Show Hidden Files",
+				"category": "Hidden Changes",
+				"icon": "$(eye)"
+			},
+			{
+				"command": "hiddenChanges.hideAll",
+				"title": "Hide Files Again",
+				"category": "Hidden Changes",
+				"icon": "$(eye-closed)"
+			}
+		],
+		"menus": {
+			"scm/resourceFolder/context": [
+				{
+					"command": "hiddenChanges.hideFile",
+					"when": "scmProvider == git && scmResourceGroup == workingTree",
+					"group": "7_hiddenChanges@1"
+				}
+			],
+			"scm/resourceState/context": [
+				{
+					"command": "hiddenChanges.hideFile",
+					"when": "scmProvider == git && scmResourceGroup == workingTree",
+					"group": "7_hiddenChanges@1"
+				},
+				{
+					"command": "hiddenChanges.forgetFile",
+					"when": "scmProvider == git && scmResourceGroup == workingTree",
+					"group": "7_hiddenChanges@2"
+				}
+			],
+			"scm/title": [
+				{
+					"command": "hiddenChanges.showAll",
+					"when": "scmProvider == git && scmProviderRootUri in hiddenChanges.canShow",
+					"group": "navigation@-1"
+				},
+				{
+					"command": "hiddenChanges.hideAll",
+					"when": "scmProvider == git && scmProviderRootUri in hiddenChanges.canHide",
+					"group": "navigation@-1"
+				}
+			]
+		},
+		"configuration": {
+			"title": "Hidden Changes",
+			"properties": {
+				"hiddenChanges.autoShowOnChange": {
+					"type": "boolean",
+					"default": true,
+					"description": "When a hidden file changes again after it was hidden, unhide it so it appears in Source Control."
+				}
+			}
+		}
+	},
+	"__metadata": {
+		"installedTimestamp": 1793368797490,
+		"targetPlatform": "undefined",
+		"size": 13067
+	}
+}
