@@ -366,12 +366,14 @@ function _clean(h, width, loaded) {
         if (ht === null && n.a.height) ht = px(n.a.height + "px");
         if ((w !== null && w <= 12) || (ht !== null && ht <= 12 && w === null)) return "";  // spacers, tracking pixels, icons: they also tear table rows apart when split out
         if (known && (known.w <= 3 || known.h <= 3)) return "";
-        if (w === null && known) w = known.w;
+        if (w === null && ht !== null && known && known.h > 0) w = ht * known.w / known.h;   // only a height declared (width:auto): keep the aspect ratio
+        else if (w === null && known) w = known.w;
         if (w !== null) w = Math.min(w, ctx.w);
         const attr = src.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
         let hh = "";
         if (w && known && known.w > 0) hh = ' height="' + Math.max(1, Math.round(w * known.h / known.w)) + '"';
         else if (w && ht !== null && n.a.width) hh = ' height="' + Math.round(ht) + '"';
+        else if (!w && ht !== null) hh = ' height="' + Math.round(ht) + '"';
         const al = ctx.align === "center" || ctx.align === "right" ? ' data-align="' + ctx.align + '"' : "";
         const hr = ctx.href ? ' data-href="' + ctx.href.replace(/&/g, "&amp;").replace(/"/g, "&quot;") + '"' : "";
         return '<img src="' + attr + '"' + (w ? ' width="' + Math.round(w) + '"' : "") + hh + al + hr + ">";
@@ -581,11 +583,12 @@ function segments(h, width) {
     const c = cleanHtml(h, width);
     c.replace(/<img\b[^>]*?>/gi, (tag, off) => {
         if (off > last) out.push({ "html": c.slice(last, off) });
-        const wm = tag.match(/\bwidth="?(\d+)/i);
+        const wm = tag.match(/\swidth="?(\d+)/i);
+        const htm = tag.match(/\sheight="?(\d+)/i);
         const sm = tag.match(/\bsrc="([^"]+)"/i);
         const am = tag.match(/\bdata-align="(\w+)"/);
         const hm = tag.match(/\bdata-href="([^"]*)"/);
-        out.push({ "img": true, "w": wm ? parseInt(wm[1]) : 0, "url": sm ? sm[1].replace(/&amp;/g, "&") : "", "align": am ? am[1] : "",
+        out.push({ "img": true, "w": wm ? parseInt(wm[1]) : 0, "h": htm ? parseInt(htm[1]) : 0, "url": sm ? sm[1].replace(/&amp;/g, "&") : "", "align": am ? am[1] : "",
                    "href": hm ? hm[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&") : "" });
         last = off + tag.length;
         return tag;
@@ -598,7 +601,7 @@ function segments(h, width) {
 // so the view can lay them out in a row instead of stacking them.
 function groupIcons(segs) {
     const label = h => String(h || "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-    const small = g => g && g.img && g.w > 0 && g.w <= 96;
+    const small = g => g && g.img && (g.w > 0 ? g.w <= 96 : g.h > 0 && g.h <= 96);
     const out = [];
     let i = 0;
     while (i < segs.length) {
@@ -607,7 +610,7 @@ function groupIcons(segs) {
         while (j < segs.length && small(segs[j])) {
             const lab = j + 1 < segs.length && segs[j + 1].html !== undefined ? label(segs[j + 1].html) : "";
             const hasLabel = j + 1 < segs.length && segs[j + 1].html !== undefined && lab.length <= 24 && !/<(table|hr|h\d)\b/i.test(segs[j + 1].html);
-            run.push({ "url": segs[j].url, "w": segs[j].w, "href": segs[j].href, "label": hasLabel ? lab : "" });
+            run.push({ "url": segs[j].url, "w": segs[j].w, "h": segs[j].h, "href": segs[j].href, "label": hasLabel ? lab : "" });
             j += hasLabel ? 2 : 1;
         }
         if (run.length >= 2) { out.push({ "group": run, "align": "center" }); i = j; }

@@ -139,7 +139,7 @@ Rectangle {
                         mipmap: false
                         opacity: status === Image.Ready ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 180 } }
-                        width: Math.min(slot.seg.w > 0 ? slot.seg.w : implicitWidth, slot.maxW)
+                        width: Math.min(slot.seg.w > 0 ? slot.seg.w : slot.seg.h > 0 && implicitHeight > 0 ? slot.seg.h * implicitWidth / implicitHeight : implicitWidth, slot.maxW)  // height-only (width:auto): keep the aspect ratio
                         x: slot.seg.align === "center" ? (slot.maxW - width) / 2 : slot.seg.align === "right" ? slot.maxW - width : 0
                         height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : 0
                         visible: opacity > 0
@@ -191,7 +191,8 @@ Rectangle {
                                 source: modelData.url
                                 asynchronous: true
                                 sourceSize.width: 128
-                                width: modelData.w; height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : modelData.w
+                                width: modelData.w > 0 ? modelData.w : modelData.h > 0 && implicitHeight > 0 ? modelData.h * implicitWidth / implicitHeight : 24
+                                height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : width
                                 fillMode: Image.PreserveAspectFit
                             }
                             StyledText {
