@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.modules.common
@@ -17,7 +18,24 @@ RippleButton {
     property real iconOpacity: 1
     property bool open: false
     property Component panelContent: null
-    property int panelWidth: 440
+    property int panelWidth: PanelRegistry.defaultWidth
+    // Resizable card: give the widget a `panelId` and the right edge of its card gets a drag grip; the width is remembered
+    // per id (~/.local/state/ii-panel-<id>-width) across opens and shell restarts. Only for `panelCard` panels.
+    property string panelId: ""
+    property int panelDefaultWidth: PanelRegistry.defaultWidth
+    property int panelMinWidth: 340
+    property int panelMaxWidth: 900
+    readonly property bool panelResizable: panelId !== "" && panelCard
+    FileView { id: widthFile; path: root.panelResizable ? `${Quickshell.env("HOME")}/.local/state/ii-panel-${root.panelId}-width` : ""; blockLoading: true; atomicWrites: true }
+    Timer { id: widthSave; interval: 400; onTriggered: widthFile.setText(String(root.panelWidth)) }
+    onPanelWidthChanged: if (panelResizable && widthLoaded) widthSave.restart()
+    property bool widthLoaded: false
+    function loadWidth() {
+        if (!panelResizable) return;
+        const w = parseInt(widthFile.text());
+        panelWidth = isNaN(w) ? panelDefaultWidth : Math.max(panelMinWidth, Math.min(panelMaxWidth, w));
+        widthLoaded = true;
+    }
     property int panelKeyboardFocus: WlrKeyboardFocus.OnDemand
     property var ignoredLayers: []     // extra layer namespaces whose opening must not close the panel
     // false: the content draws its own card(s) (e.g. a list + a detail pane) and lists its clickable items in
@@ -91,7 +109,7 @@ RippleButton {
     // A flag, not unloadDelay.running: restarting a running timer flips `running` and would recreate the panel.
     property bool panelLoaded: false
     onOpenChanged: if (open) { panelLoaded = true; PanelRegistry.closeOthers(root) } else unloadDelay.restart()
-    Component.onCompleted: PanelRegistry.register(root)
+    Component.onCompleted: { PanelRegistry.register(root); loadWidth() }
     Component.onDestruction: PanelRegistry.unregister(root)
     Timer { id: unloadDelay; interval: 400; onTriggered: if (!root.open) root.panelLoaded = false }
     Loader {
@@ -209,6 +227,27 @@ RippleButton {
                     border.width: 1
                     border.color: Appearance.colors.colLayer0Border
                     clip: true
+                    MouseArea {   // drag the right edge to resize (shared by every `panelId` widget)
+                        id: widthGrip
+                        visible: root.panelResizable
+                        z: 10
+                        anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
+                        width: 8
+                        hoverEnabled: true
+                        cursorShape: Qt.SplitHCursor
+                        property real pressX: 0
+                        onPressed: mouse => pressX = mouse.x
+                        onPositionChanged: mouse => {
+                            if (pressed) root.panelWidth = Math.round(Math.max(root.panelMinWidth, Math.min(root.panelMaxWidth, mapToItem(card, mouse.x, 0).x + width - pressX)));
+                        }
+                        Rectangle {
+                            anchors { right: parent.right; rightMargin: 2; verticalCenter: parent.verticalCenter }
+                            width: 3; height: 40; radius: 1.5
+                            opacity: widthGrip.pressed || widthGrip.containsMouse ? 1 : 0
+                            color: Appearance.colors.colPrimary
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                        }
+                    }
                     Loader {
                         id: content
                         parent: root.panelCard ? card : win.contentItem   // custom layout: the whole window, content draws its own cards

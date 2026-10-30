@@ -9,6 +9,7 @@ Item {
     default property alias content: holder.data
     property bool open: false
     property bool pinned: false
+    property bool sticky: pinned   // pinned for good (user pin, badge): decides the icon order. Transient pins (panel/menu open) must not reorder icons
     property real gap: 2
     readonly property bool shown: open || pinned
     property real p: shown ? 1 : 0

@@ -18,7 +18,7 @@ import Quickshell.Hyprland
 WidgetBase {
     id: root
     iconName: ""   // draws its own GitHub mark below
-    panelWidth: 480
+    panelId: "gist"
     readonly property bool pinned: open || menuOpen   // keeps the icon shown in the sliding bar row (zbar-reveal) while in use
     property var gists: []                 // index.json: [{id, description, public, html_url, created_at, updated_at, files: [{filename, language, size, content, truncated, clipped}]}]
     property bool syncing: syncProc.running

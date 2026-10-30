@@ -14,6 +14,7 @@ import Quickshell.Hyprland
 WidgetBase {
     id: root
     iconName: "deployed_code"
+    panelId: "docker"
     iconOpacity: available ? 1 : 0.4
     property int running: 0
     property bool available: true

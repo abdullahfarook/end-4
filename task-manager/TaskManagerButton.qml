@@ -12,6 +12,7 @@ import Quickshell.Io
 WidgetBase {
     id: root
     iconName: "memory"
+    panelId: "task-manager"
 
     panelContent: Component { FocusScope {
         id: tm

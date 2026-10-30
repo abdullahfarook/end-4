@@ -51,7 +51,8 @@ WidgetBase {
 | `open` | `false` | The panel is shown. Set it to open/close from code; react with `onOpenChanged` (e.g. refresh on open). |
 | `clickOpens` | `true` | `false`: left click does not toggle the panel; handle `onClicked` yourself (Mail opens its app when the daemon is down). |
 | `panelContent` | `null` | Component with the panel content. Its root should be a `FocusScope`; give the field that should get the keys `focus: true`. |
-| `panelWidth` | `440` | Card width. Resizable panels bind it: `Binding { target: root; property: "panelWidth"; value: fs.cardW }`. |
+| `panelWidth` | `PanelRegistry.defaultWidth` (440, same as the AI panel) | Card width. Resizable panels bind it: `Binding { target: root; property: "panelWidth"; value: fs.cardW }`. |
+| `panelId` | `""` | Makes the card **resizable**: a drag grip on its right edge, width remembered per id in `~/.local/state/ii-panel-<id>-width`. Set it on every card panel (`panelCard: true`) so all behave the same; never write a grip yourself. Tune with `panelDefaultWidth` (the shared default), `panelMinWidth` (340), `panelMaxWidth` (900). Panels with their own layout (`panelCard: false`) manage `panelWidth` themselves. |
 | `panelKeyboardFocus` | `OnDemand` | Layer keyboard focus. Bind it if it must change (Google: `Exclusive` while the first search loads). |
 | `panelCard` | `true` | `true`: the base draws the standard card (full height, gaps, shadow) and the content fills it. `false`: custom layout, see below. |
 | `ignoredLayers` | `[]` | Extra layer namespaces whose opening must not close this panel. Rarely needed. |

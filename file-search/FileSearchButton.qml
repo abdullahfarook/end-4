@@ -16,10 +16,10 @@ WidgetBase {
     id: root
     iconName: "manage_search"
     iconSize: 22
+    panelId: "file-search"
 
     panelContent: Component { FocusScope {
         id: fs
-        Binding { target: root; property: "panelWidth"; value: fs.cardW }   // the card is resizable (right-edge grip)
         property string query: ""
         property string scope: "home"          // "home" | "root"
         property var results: []               // [{kind, size, mtime, path}]
@@ -38,7 +38,6 @@ WidgetBase {
         property bool filterOpen: false
         property real filterX: 0
         property real filterY: 0
-        property real cardW: 440
         property real sizeW: 64
         property real dateW: 100
         property real sortMenuX: 0
@@ -77,11 +76,10 @@ WidgetBase {
         readonly property string stateFile: `${Quickshell.env("HOME")}/.local/state/file-search.json`
         property bool stateReady: false
         function saveState() {
-            if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query, cardW, typeFilter, matchCase, matchPath }));
+            if (stateReady) stateView.setText(JSON.stringify({ sortKey, sortDir, scope, query, typeFilter, matchCase, matchPath }));
         }
         onSortKeyChanged: saveState()
         onSortDirChanged: saveState()
-        onCardWChanged: saveState()
         onTypeFilterChanged: { current = 0; saveState() }
         onMatchCaseChanged: { saveState(); debounce.restart() }
         onMatchPathChanged: { saveState(); debounce.restart() }
@@ -92,7 +90,6 @@ WidgetBase {
                 const j = JSON.parse(stateView.text());
                 if (sortDefs.some(d => d.key === j.sortKey)) fs.sortKey = j.sortKey;
                 if (["", "asc", "desc"].includes(j.sortDir)) fs.sortDir = j.sortDir;
-                if (typeof j.cardW === "number") fs.cardW = Math.max(340, Math.min(900, j.cardW));
                 if (["all", "dir", "file"].includes(j.typeFilter)) fs.typeFilter = j.typeFilter;
                 if (typeof j.matchCase === "boolean") fs.matchCase = j.matchCase;
                 if (typeof j.matchPath === "boolean") fs.matchPath = j.matchPath;
@@ -642,26 +639,6 @@ WidgetBase {
             }
         }
 
-        // Drag the right edge to resize the widget width
-        MouseArea {
-            id: widthGrip
-            anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
-            width: 8
-            hoverEnabled: true
-            cursorShape: Qt.SplitHCursor
-            property real pressX: 0
-            onPressed: mouse => pressX = mouse.x
-            onPositionChanged: mouse => {
-                if (pressed) fs.cardW = Math.max(340, Math.min(900, mapToItem(fs, mouse.x, 0).x + width - pressX));
-            }
-            Rectangle {
-                anchors { right: parent.right; rightMargin: 2; verticalCenter: parent.verticalCenter }
-                width: 3; height: 40; radius: 1.5
-                opacity: widthGrip.pressed || widthGrip.containsMouse ? 1 : 0
-                color: Appearance.colors.colPrimary
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-            }
-        }
 
         // Filter menu (overlay inside the card)
         MouseArea {

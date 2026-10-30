@@ -54,6 +54,17 @@ def bar(s):
     return s
 rw(Q + "/ii/bar/BarContent.qml", bar)
 
+def sticky(s):
+    # the icon order follows `sticky` (lasting pins), never a panel/menu being open: opening a widget must not move its icon
+    if "sl[k].pinned)" not in s: return s
+    s = s.replace("sl[k].active && sl[k].pinned)", "sl[k].active && sl[k].sticky)")
+    def add(m):
+        terms = [t.strip() for t in m.group(2).split("||")]
+        keep = [t for t in terms if not re.search(r"\.(open|menuOpen|pinned)$", t)]
+        return m.group(0) + "\n" + m.group(1) + "sticky: " + (" || ".join(keep) or "false")
+    return re.sub(r"^( *)pinned: (Config\.options\.bar\.buttons\.pinned\.includes\([^\n]*)$", add, s, flags=re.M)
+rw(Q + "/ii/bar/BarContent.qml", sticky)
+
 def settings(s):
     if "Pin: always show" in s: return s
     m = re.search(r"    ContentSection \{\n        icon: \"widgets\"\n        title: Translation.tr\(\"Bar widgets\"\)\n.*?\n    \}\n", s, re.S)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Settings > Bar > "Bar widgets": per left-bar button an on/off switch, a pin (always shown, not only on hover) and up/down to set the order.
-# In the bar, shown-for-good icons (user pin, unread badge, open popup) come first in that order, so they never move when the rest reveal.
+# In the bar, shown-for-good icons (user pin, unread badge; never a merely open panel or menu, so opening a widget does not reorder icons) come first in that order, so they never move when the rest reveal.
 # Run AFTER bar-widget-toggles and zbar-reveal (patches their output; idempotent).
 set -euo pipefail
 Q="$HOME/.config/quickshell/ii/modules"
