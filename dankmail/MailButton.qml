@@ -43,6 +43,7 @@ WidgetBase {
     property int _threadsReqId: -1
     property var _syncReqs: ({})           // ids of in-flight system.sync requests
     property int _threadReqId: -1
+    property int _markAllReqId: -1
     property int _htmlReqId: -1
     property bool _htmlForViewer: false
     property bool htmlReady: false         // the original-HTML fetch for the open thread finished (or timed out); the detail panel waits for it so it renders once
@@ -115,6 +116,11 @@ WidgetBase {
         olderGuard.restart();
     }
     function op(method, id) { call(method, { "ids": [id] }); }
+    // Mark every unread inbox thread (of the selected account, or all) as read: fetch the full unread list, then one markRead
+    function markAllRead() {
+        if (!cmdSocket.connected) return;
+        _markAllReqId = call("threads.list", { "inbox": true, "unread": true, "limit": 1000, "account": accountFilter });
+    }
     function syncNow() {
         if (!cmdSocket.connected || syncing) return;
         requestError = "";
@@ -203,6 +209,11 @@ WidgetBase {
         if (msg.id in _syncReqs) {
             const p = Object.assign({}, _syncReqs); delete p[msg.id]; _syncReqs = p;
             if (Object.keys(p).length === 0) { syncing = false; syncGuard.stop(); }
+        }
+        if (msg.id === _markAllReqId) {
+            _markAllReqId = -1;
+            if (Array.isArray(msg.result) && msg.result.length) { call("ops.markRead", { "ids": msg.result.map(t => t.id) }); refreshDebounce.restart(); }
+            return;
         }
         if (msg.error && msg.id === _threadReqId) { closeThread(); return; }
         if (msg.error) { listLoading = false; requestError = qsTr("The request failed. Open Dank Mail to check the account."); return; }
@@ -450,6 +461,12 @@ WidgetBase {
                     }
                 }
                 Item { Layout.fillWidth: true }
+                RippleButton {
+                    implicitWidth: 28; implicitHeight: 28; buttonRadius: 14
+                    onClicked: root.markAllRead()
+                    MaterialSymbol { anchors.centerIn: parent; text: "done_all"; iconSize: 18; color: Appearance.colors.colOnLayer1 }
+                    StyledToolTip { text: "Mark all as read" }
+                }
                 RippleButton {
                     implicitWidth: 28; implicitHeight: 28; buttonRadius: 14
                     onClicked: root.syncNow()
